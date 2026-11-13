@@ -197,6 +197,30 @@ class CoreTest {
     }
 
     @Test
+    fun unPliLocalEstRedresse() {
+        // page de « lignes de texte » déformée par une bosse locale (feuille pliée puis dépliée)
+        val w = 700; val h = 990
+        val flat = Raster(w, h, IntArray(w * h) { i ->
+            val x = i % w; val y = i / w
+            val ink = y % 30 in 12..17 && x in 60..640 && (x / 9) % 5 != 0 && y in 60..930
+            if (ink) 0xFF282828.toInt() else 0xFFF4F2EC.toInt()
+        })
+        fun bump(x: Int, y: Int): Double {
+            val dx = (x - 430) / 120.0; val dy = (y - 620) / 160.0
+            return 9.0 * kotlin.math.exp(-(dx * dx + dy * dy)) - 5.0 * kotlin.math.exp(-((x - 180) / 90.0).let { it * it } - ((y - 300) / 120.0).let { it * it })
+        }
+        val warped = Raster(w, h, IntArray(w * h) { i ->
+            val x = i % w; val y = i / w
+            flat.px[(y + bump(x, y)).toInt().coerceIn(0, h - 1) * w + x]
+        })
+        val before = Dewarper.estimateDisplacement(warped.luma()).second
+        val map = Mapping(Outline.fullFrame(0f), w, h, useCurves = true, inset = 0.0)
+        val res = Dewarper.dewarp(warped, map, w, h, refine = true)
+        assertTrue(before > 1.0, "la bosse doit se voir avant correction ($before px)")
+        assertTrue(res.residualPx < 0.6, "ondulation restante ${res.residualPx} px (avant : $before px)")
+    }
+
+    @Test
     fun sansCourbureLeRenduEstUneSimplePerspective() {
         val src = Raster(200, 100, IntArray(200 * 100) { i -> if ((i % 200) < 100) 0xFFFF0000.toInt() else 0xFF0000FF.toInt() })
         val m = Mapping(Outline.fullFrame(0f), 200, 100, useCurves = false, inset = 0.0)

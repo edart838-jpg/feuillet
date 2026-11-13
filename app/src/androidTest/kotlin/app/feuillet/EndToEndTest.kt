@@ -122,12 +122,16 @@ class EndToEndTest {
             compose.onNodeWithText("Scan ", substring = true).performClick()
             compose.waitUntilAtLeastOneExists(hasText("Exporter"), 10_000)
             compose.onNodeWithContentDescription("Page 1").performClick()
-            compose.waitUntilAtLeastOneExists(hasText("Courbure corrigée"), 15_000)
-            compose.waitUntilAtLeastOneExists(hasContentDescription("Photo d'origine"), 20_000)
+            // toucher une page ouvre la page redressée et recadrée, pas la photo d'origine
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Aperçu de la page"), 60_000)
             compose.onNodeWithText("Courbure corrigée").performClick()
             compose.waitUntilAtLeastOneExists(hasText("Corriger la courbure"), 5_000)
             compose.onNodeWithText("Corriger la courbure").performClick()
-            compose.onNodeWithText("Couleurs et rendu").performClick()
+            compose.onNodeWithContentDescription("Pivoter de 90 degrés").performClick()
+            // le recadrage manuel reste accessible
+            compose.onNodeWithText("Recadrage manuel").performClick()
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Photo d'origine"), 20_000)
+            compose.onNodeWithText("Page redressée").performClick()
             compose.waitUntilAtLeastOneExists(hasContentDescription("Aperçu de la page"), 60_000)
             compose.onNodeWithText("Gris").performClick()
             compose.onNodeWithText("Terminer").performClick()
@@ -148,7 +152,7 @@ class EndToEndTest {
             assertNotNull(fresh)
             scenario.onActivity { it.model.draft = fresh; it.model.push(Screen.Edit(docId, fresh!!.id)) }
             compose.waitUntilAtLeastOneExists(hasText("Nouvelle page"), 10_000)
-            compose.waitUntilAtLeastOneExists(hasContentDescription("Photo d'origine"), 20_000)
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Aperçu de la page"), 60_000)
             scenario.onActivity { assertEquals(before, it.model.store.docs.first().pages.size) }
             // le rendu de la dernière page du document (noir et blanc) est repris par défaut
             assertEquals(Filter.BW, fresh!!.filter)

@@ -133,22 +133,27 @@ class Mapping(
     }
 }
 
-/** Champ de déplacement vertical lissé (polynôme 5×3), en fraction de la hauteur de page. */
-class Displacement(val co: DoubleArray) {
+/**
+ * Champ de déplacement vertical, en fraction de la hauteur de page : grille de nœuds interpolée bilinéairement.
+ * Assez souple pour suivre un pli ou une bosse locale, pas seulement un cintrage d'ensemble.
+ */
+class Displacement(val nodes: DoubleArray) {
+    init {
+        require(nodes.size == NX * NY)
+    }
+
     fun at(s: Double, t: Double): Double {
-        val x = 2 * s - 1; val y = 2 * t - 1
-        var sum = 0.0; var xi = 1.0; var k = 0
-        for (i in 0 until NX) {
-            var yj = 1.0
-            for (j in 0 until NY) { sum += co[k++] * xi * yj; yj *= y }
-            xi *= x
-        }
-        return min(max(sum, -0.04), 0.04)
+        val fx = min(max(s, 0.0), 1.0) * (NX - 1); val fy = min(max(t, 0.0), 1.0) * (NY - 1)
+        val i = min(NX - 2, fx.toInt()); val j = min(NY - 2, fy.toInt())
+        val ax = fx - i; val ay = fy - j
+        val v = (nodes[j * NX + i] * (1 - ax) + nodes[j * NX + i + 1] * ax) * (1 - ay) +
+            (nodes[(j + 1) * NX + i] * (1 - ax) + nodes[(j + 1) * NX + i + 1] * ax) * ay
+        return min(max(v, -0.05), 0.05)
     }
 
     companion object {
-        const val NX = 5
-        const val NY = 3
+        const val NX = 11
+        const val NY = 15
     }
 }
 
@@ -219,7 +224,7 @@ object Dewarper {
      * Chaîne complète : rendu, puis jusqu'à [passes] affinages sur les lignes de texte.
      * L'image finale est ré-échantillonnée une seule fois depuis la photo.
      */
-    fun dewarp(src: Raster, mapping: Mapping, outW: Int, outH: Int, refine: Boolean, passes: Int = 2): DewarpResult {
+    fun dewarp(src: Raster, mapping: Mapping, outW: Int, outH: Int, refine: Boolean, passes: Int = 3): DewarpResult {
         val disp = ArrayList<Displacement>()
         var residual = 0.0
         if (refine) {
@@ -229,7 +234,7 @@ object Dewarper {
                 val low = render(src, mapping, lw, lh, disp).luma()
                 val (d, res) = estimateDisplacement(low)
                 residual = res * outW / lw
-                if (d == null || res < 0.35) break
+                if (d == null || res < 0.3) break
                 disp.add(0, d)
             }
             if (disp.isNotEmpty()) {
@@ -263,7 +268,7 @@ object Dewarper {
         val minW = (w * 0.18).toInt(); val maxH = max(8, (w * 0.05).toInt())
         val seen = ByteArray(w * h)
         val stack = IntArray(w * h)
-        val rows = ArrayList<DoubleArray>(); val ys = ArrayList<Double>()
+        val sx = ArrayList<Double>(); val sy = ArrayList<Double>(); val sd = ArrayList<Double>()
         var lines = 0; var sumAbs = 0.0; var count = 0
         val colSum = DoubleArray(w); val colCnt = IntArray(w)
         for (start in 0 until w * h) {
@@ -286,40 +291,55 @@ object Dewarper {
             if (bw < minW || bh > maxH || bh < 2 || n >= 200000) continue
             for (x in x0..x1) { colSum[x] = 0.0; colCnt[x] = 0 }
             for (p in pix) { val x = p % w; colSum[x] += (p / w).toDouble(); colCnt[x]++ }
-            // lissage cubique du centre de ligne (gomme hampes et jambages)
-            val fr = ArrayList<DoubleArray>(); val fy = ArrayList<Double>(); val fx = ArrayList<Int>()
-            for (x in x0..x1) if (colCnt[x] > 0) {
-                val xn = (x - x0).toDouble() / bw * 2 - 1
-                fr.add(doubleArrayOf(1.0, xn, xn * xn, xn * xn * xn)); fy.add(colSum[x] / colCnt[x]); fx.add(x)
+            // centre de ligne par colonne, lissé par moyenne glissante : gomme hampes et jambages mais garde
+            // les ondulations locales (pli, bosse)
+            val xsCol = ArrayList<Int>(); val raw = ArrayList<Double>()
+            for (x in x0..x1) if (colCnt[x] > 0) { xsCol.add(x); raw.add(colSum[x] / colCnt[x]) }
+            if (xsCol.size < minW * 0.7) continue
+            val half = max(6, w / 60)
+            val smooth = DoubleArray(raw.size)
+            var acc = 0.0; var lo = 0; var hi = -1
+            for (i in raw.indices) {
+                while (hi < raw.size - 1 && xsCol[hi + 1] - xsCol[i] <= half) { hi++; acc += raw[hi] }
+                while (xsCol[i] - xsCol[lo] > half) { acc -= raw[lo]; lo++ }
+                smooth[i] = acc / (hi - lo + 1)
             }
-            if (fr.size < minW * 0.7) continue
-            val cubic = Lsq.fit(fr, fy.toDoubleArray(), 1e-6) ?: continue
-            val smooth = DoubleArray(fr.size) { i -> fr[i][0] * cubic[0] + fr[i][1] * cubic[1] + fr[i][2] * cubic[2] + fr[i][3] * cubic[3] }
             val med = smooth.sortedArray()[smooth.size / 2]
             lines++
             var i = 0
             while (i < smooth.size) {
                 val dy = smooth[i] - med
-                rows.add(basis(fx[i].toDouble() / (w - 1), smooth[i] / (h - 1))); ys.add(dy / h)
+                sx.add(xsCol[i].toDouble() / (w - 1)); sy.add(smooth[i] / (h - 1)); sd.add(dy / h)
                 sumAbs += abs(dy); count++
-                i += 6
+                i += 4
             }
         }
         if (lines < 4 || count < 60) return null to 0.0
-        val co = Lsq.fit(rows, ys.toDoubleArray(), 1e-3 * count / 1000.0) ?: return null to sumAbs / count
-        return Displacement(co) to sumAbs / count
-    }
-
-    private fun basis(s: Double, t: Double): DoubleArray {
-        val x = 2 * s - 1; val y = 2 * t - 1
-        val r = DoubleArray(Displacement.NX * Displacement.NY)
-        var xi = 1.0; var k = 0
-        for (i in 0 until Displacement.NX) {
-            var yj = 1.0
-            for (j in 0 until Displacement.NY) { r[k++] = xi * yj; yj *= y }
-            xi *= x
+        // Moindres carrés sur la grille : fidélité aux mesures + lissage (dérivées secondes) + rappel vers zéro
+        val nx = Displacement.NX; val ny = Displacement.NY; val n = nx * ny
+        val ata = Array(n) { DoubleArray(n) }; val atb = DoubleArray(n)
+        val idx = IntArray(4); val wt = DoubleArray(4)
+        for (k in 0 until count) {
+            val fx = sx[k].coerceIn(0.0, 1.0) * (nx - 1); val fy = sy[k].coerceIn(0.0, 1.0) * (ny - 1)
+            val i = min(nx - 2, fx.toInt()); val j = min(ny - 2, fy.toInt())
+            val ax = fx - i; val ay = fy - j
+            idx[0] = j * nx + i; idx[1] = idx[0] + 1; idx[2] = idx[0] + nx; idx[3] = idx[2] + 1
+            wt[0] = (1 - ax) * (1 - ay); wt[1] = ax * (1 - ay); wt[2] = (1 - ax) * ay; wt[3] = ax * ay
+            for (p in 0 until 4) {
+                atb[idx[p]] += wt[p] * sd[k]
+                for (q in 0 until 4) ata[idx[p]][idx[q]] += wt[p] * wt[q]
+            }
         }
-        return r
+        val lambda = 0.6 * count / n
+        fun smoothTerm(a: Int, b: Int, c: Int) {
+            val ids = intArrayOf(a, b, c); val cf = doubleArrayOf(1.0, -2.0, 1.0)
+            for (p in 0 until 3) for (q in 0 until 3) ata[ids[p]][ids[q]] += lambda * cf[p] * cf[q]
+        }
+        for (j in 0 until ny) for (i in 1 until nx - 1) smoothTerm(j * nx + i - 1, j * nx + i, j * nx + i + 1)
+        for (j in 1 until ny - 1) for (i in 0 until nx) smoothTerm((j - 1) * nx + i, j * nx + i, (j + 1) * nx + i)
+        for (k in 0 until n) ata[k][k] += 0.02 * count / n
+        val co = Lsq.solve(ata, atb) ?: return null to sumAbs / count
+        return Displacement(co) to sumAbs / count
     }
 }
 

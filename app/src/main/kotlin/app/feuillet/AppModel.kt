@@ -14,7 +14,7 @@ sealed interface Screen {
     data object Library : Screen
     data class Capture(val docId: String) : Screen
     data class Document(val docId: String) : Screen
-    data class Edit(val docId: String, val pageId: String, val render: Boolean = false) : Screen
+    data class Edit(val docId: String, val pageId: String, val render: Boolean = true) : Screen
     data class Export(val docId: String) : Screen
     data object Settings : Screen
 }

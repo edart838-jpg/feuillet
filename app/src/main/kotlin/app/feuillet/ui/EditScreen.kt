@@ -140,8 +140,8 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
             if (!isDraft) Pill("Terminer", true, { leave() }, solid = true)
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Bords et courbure", !renderTab, { renderTab = false }, Modifier.weight(1f))
-            Pill("Couleurs et rendu", renderTab, { renderTab = true }, Modifier.weight(1f))
+            Pill("Page redressée", renderTab, { renderTab = true }, Modifier.weight(1f))
+            Pill("Recadrage manuel", !renderTab, { renderTab = false }, Modifier.weight(1f))
         }
         if (!renderTab) {
             EdgesTab(page, sourceImage, onChange = { page = it }, onRedetect = {
@@ -299,21 +299,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.EdgesTab(page: Page, 
     }
 
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            BigButton(
-                if (page.useCurves) "Courbure corrigée" else "Corriger la courbure", { onChange(page.copy(useCurves = !page.useCurves)) },
-                Modifier.weight(1f), primary = page.useCurves, icon = Ic.Curve,
-            )
-            IconBtn(Ic.Detect, "Redétecter les bords", onRedetect, size = 56.dp, radius = 16.dp, outlined = true)
-            IconBtn(Ic.Rotate, "Pivoter de 90 degrés", { onChange(page.copy(rotation = (page.rotation + 1) % 4)) }, size = 56.dp, radius = 16.dp, outlined = true)
-        }
-        if (page.useCurves) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Force de l'aplanissement", color = C.Muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Text("${(page.strength * 100).roundToInt()} %", color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Slider(value = page.strength, onValueChange = { onChange(page.copy(strength = it)) }, valueRange = 0f..1.5f, modifier = Modifier.height(36.dp))
-        }
+        Text("Déplacez les coins si le cadrage automatique n'est pas bon. La courbure et la rotation se règlent sur la page redressée.", color = C.Muted, fontSize = 12.sp)
+        BigButton("Redétecter les bords", onRedetect, Modifier.fillMaxWidth(), primary = false, icon = Ic.Detect, height = 48.dp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Format de sortie", color = C.Muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
             if (page.rotation != 0) Text("pivoté de ${page.rotation * 90}°", color = C.Muted, fontSize = 12.sp)
@@ -373,6 +360,14 @@ private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
     }
 
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+        Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // courbure interne du document : appliquée ou non, visible aussitôt sur l'aperçu
+            BigButton(
+                if (page.useCurves) "Courbure corrigée" else "Corriger la courbure", { onChange(page.copy(useCurves = !page.useCurves)) },
+                Modifier.weight(1f), primary = page.useCurves, icon = Ic.Curve, height = 52.dp,
+            )
+            IconBtn(Ic.Rotate, "Pivoter de 90 degrés", { onChange(page.copy(rotation = (page.rotation + 1) % 4)) }, size = 52.dp, radius = 16.dp, outlined = true)
+        }
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(Filter.values().toList()) { f ->
                 val sel = page.filter == f

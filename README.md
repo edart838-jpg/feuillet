@@ -17,7 +17,7 @@ Chaque version s'installe par-dessus la précédente sans perdre les scans.
 
 | Étape | Détail |
 | --- | --- |
-| Capture | Une page à la fois : après la photo, l'écran des bords s'ouvre aussitôt, puis la page est ajoutée au document en construction, d'où l'on scanne la suivante. Contour affiché en direct, déclenchement automatique, lampe, import depuis la galerie. |
+| Capture | Une page à la fois : après la photo, la page s'ouvre déjà redressée et recadrée ; on y active ou non la correction de courbure, on la pivote, on règle les couleurs, puis elle est ajoutée au document en construction, d'où l'on scanne la suivante. Contour affiché en direct, déclenchement automatique, lampe, import depuis la galerie. |
 | Bords et courbure | Quatre coins détectés automatiquement et déplaçables (avec loupe), bords courbes suivis, bouton « Corriger la courbure », réglage de force, poignées de courbure manuelles, rotation, format de sortie. |
 | Rendu | Filtres Auto, Couleur, Gris, Noir et blanc, Photo, Original ; suppression des ombres ; netteté par micro-réseau de neurones (texte ou photo) ; luminosité et contraste ; comparaison avec l'original en maintenant le doigt. |
 | Bibliothèque | Recherche dans les titres, tags, dossiers et texte reconnu ; dossiers ; tags ; sélection multiple ; sous chaque page : avancer, reculer, pivoter, supprimer. |
@@ -36,7 +36,7 @@ Chaque version s'installe par-dessus la précédente sans perdre les scans.
 3. **Bords courbes** : chaque bord est décrit par un polynôme ajusté sur le contour ; l'intérieur de la page est
    interpolé entre les quatre bords (patch de Coons) et re-paramétré par longueur d'arc pour dérouler la page.
 4. **Lignes de texte** : l'ondulation restante de chaque ligne est mesurée dans la page aplanie, puis compensée
-   par un champ de déplacement lissé. Jusqu'à deux passes.
+   par un champ de déplacement local (grille de nœuds), assez souple pour suivre un pli. Jusqu'à trois passes.
 
 Sur la photo de test (page bombée simulée), l'ondulation moyenne des lignes passe de plus de 3 pixels à moins
 de 0,6 pixel ; ce seuil est vérifié par les tests.
