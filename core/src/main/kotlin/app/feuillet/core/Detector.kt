@@ -33,6 +33,38 @@ class Outline(val corners: FloatArray, val curves: FloatArray = FloatArray(12), 
         return Outline(corners.copyOf(), cv, confidence)
     }
 
+    /**
+     * Points d'un bord (0 haut, 1 droit, 2 bas, 3 gauche) en coordonnées normalisées, pour l'affichage.
+     * @return n+1 points (x, y) entrelacés
+     */
+    fun edgePolyline(edge: Int, n: Int, useCurves: Boolean, strength: Float): FloatArray {
+        val hom = Homography(DoubleArray(8) { corners[it].toDouble() })
+        val out = FloatArray(2 * (n + 1)); val p = DoubleArray(2)
+        val a = curves[edge * 3]; val b = curves[edge * 3 + 1]; val c = curves[edge * 3 + 2]
+        for (i in 0..n) {
+            val t = i.toDouble() / n
+            val f = if (useCurves) strength * t * (1 - t) * (a + b * t + c * t * t) else 0.0
+            when (edge) {
+                0 -> hom.map(t, f, p)
+                1 -> hom.map(1 + f, t, p)
+                2 -> hom.map(t, 1 + f, p)
+                else -> hom.map(f, t, p)
+            }
+            out[2 * i] = p[0].toFloat(); out[2 * i + 1] = p[1].toFloat()
+        }
+        return out
+    }
+
+    /**
+     * Écart au bord droit (dans le carré redressé) d'un point de la photo, pour le réglage manuel
+     * d'une poignée de courbure. Coordonnées normalisées.
+     */
+    fun offsetFromEdge(edge: Int, x: Float, y: Float): Float {
+        val p = DoubleArray(2)
+        Homography(DoubleArray(8) { corners[it].toDouble() }).unmap(x.toDouble(), y.toDouble(), p)
+        return when (edge) { 0 -> p[1]; 1 -> p[0] - 1; 2 -> p[1] - 1; else -> p[0] }.toFloat()
+    }
+
     companion object {
         fun fullFrame(inset: Float = 0.04f) = Outline(
             floatArrayOf(inset, inset, 1 - inset, inset, 1 - inset, 1 - inset, inset, 1 - inset)

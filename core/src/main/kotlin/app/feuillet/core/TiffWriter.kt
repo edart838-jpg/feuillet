@@ -12,11 +12,18 @@ object TiffWriter {
 
     /** @param dpi résolution inscrite dans le fichier (une valeur par page) */
     fun write(out: OutputStream, pages: List<Raster>, dpi: List<Int>) {
-        require(pages.isNotEmpty() && pages.size == dpi.size)
+        require(pages.size == dpi.size)
+        write(out, pages.size, { pages[it] }, { dpi[it] })
+    }
+
+    /** Variante paresseuse : les pages sont demandées une à une, pour ne jamais en garder plusieurs en mémoire. */
+    fun write(out: OutputStream, count: Int, pageAt: (Int) -> Raster, dpiAt: (Int) -> Int) {
+        require(count > 0) { "aucune page" }
         out.write(byteArrayOf(0x49, 0x49, 42, 0))
         var offset = 8L                                   // en-tête : 4 octets + position du premier IFD
         var pending: ByteArray? = null                    // IFD de la page précédente, écrit dès qu'on connaît le suivant
-        for ((i, page) in pages.withIndex()) {
+        for (i in 0 until count) {
+            val page = pageAt(i)
             val gray = Enhancer.isGray(page)
             val data = compress(page, gray)
             val pad = data.size % 2
@@ -30,7 +37,7 @@ object TiffWriter {
             val dataOffset = offset
             out.write(data); if (pad == 1) out.write(0)
             offset += data.size + pad
-            pending = ifd(page, gray, dataOffset, data.size, offset, dpi[i])
+            pending = ifd(page, gray, dataOffset, data.size, offset, dpiAt(i))
         }
         out.write(pending!!)
         out.flush()
