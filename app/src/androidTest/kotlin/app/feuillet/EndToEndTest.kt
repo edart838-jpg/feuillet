@@ -122,8 +122,9 @@ class EndToEndTest {
 
             // réglages et modules de langues
             compose.onNodeWithContentDescription("Réglages et langues").performClick()
-            compose.waitUntilAtLeastOneExists(hasText("Français"), 10_000)
-            compose.onNodeWithText("LANGUES INSTALLÉES", substring = true).assertIsDisplayed()
+            compose.waitUntilAtLeastOneExists(hasText("PP-OCR embarqué"), 10_000)
+            compose.onNodeWithText("MOTEUR DE RECONNAISSANCE DU TEXTE").assertIsDisplayed()
+            compose.onNodeWithText("Tesseract").assertIsDisplayed()
             compose.onNodeWithContentDescription("Retour").performClick()
 
             // document, puis réglage d'une page

@@ -22,7 +22,7 @@ Chaque version s'installe par-dessus la précédente sans perdre les scans.
 | Rendu | Filtres Scanner (par défaut : noir franc sur blanc pur, contraste local de type Sauvola), Auto, Couleur, Gris, Noir et blanc, Photo, Original ; pages rendues jusqu'à 3508 pixels (A4 à 300 points par pouce) ; suppression des ombres ; netteté par micro-réseau de neurones (texte ou photo) ; luminosité et contraste ; comparaison avec l'original en maintenant le doigt. |
 | Bibliothèque | Recherche dans les titres, tags, dossiers et texte reconnu ; dossiers ; tags ; sélection multiple ; sous chaque page : avancer, reculer, pivoter, supprimer. |
 | Export | PDF cherchable (texte invisible sélectionnable), PDF, JPEG, PNG, WebP, TIFF multipage, texte ; archive ZIP pour les images ; trois niveaux de qualité ; partage ou enregistrement dans Téléchargements/Feuillet. |
-| OCR | Français et anglais fournis. Plus de quarante autres langues téléchargeables depuis les réglages, en version rapide ou précise. |
+| OCR | PP-OCR embarqué par défaut (PP-OCRv6 « tiny » de PaddleOCR, exécuté par ONNX Runtime sur l'appareil) : lignes localisées puis lues, sans réglage de langue pour les alphabets latins, le chinois et le japonais. Tesseract reste disponible pour les autres langues, avec plus de quarante modules téléchargeables. |
 
 ## Comment la courbure est corrigée
 
@@ -74,7 +74,8 @@ régénère les poids.
 
 - `core/` : moteur d'image en Kotlin pur, sans dépendance Android (détection, dé-courbure, filtres,
   micro-réseaux, écrivains PDF et TIFF). Testé par `core/src/test`.
-- `app/` : application Android (Jetpack Compose, CameraX, Tesseract pour l'OCR).
+- `app/` : application Android (Jetpack Compose, CameraX, PP-OCR par ONNX Runtime, Tesseract en relais).
+- `tools/fetch_ppocr.sh` : télécharge les modèles PP-OCR à la compilation (ils ne sont pas versionnés).
 - `app/src/androidTest` : essai de bout en bout exécuté sur émulateur.
 - `.github/workflows/build.yml` : tests, compilation de l'APK, publication dans les Releases, essai sur émulateur.
 
@@ -85,7 +86,8 @@ gradle :core:test            # tests du moteur
 gradle :app:assembleRelease  # APK dans app/build/outputs/apk/release/
 ```
 
-Nécessite le JDK 17, Gradle 8.9 et le SDK Android 34. Chaque envoi sur le dépôt lance la compilation
+Nécessite le JDK 17, Gradle 8.9 et le SDK Android 34. Lancer `tools/fetch_ppocr.sh` une fois avant de compiler
+pour inclure PP-OCR (sans lui, l'application utilise Tesseract). Chaque envoi sur le dépôt lance la compilation
 sur GitHub Actions.
 
 ## Limites connues

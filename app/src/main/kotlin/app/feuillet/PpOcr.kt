@@ -51,7 +51,8 @@ class PpOcr(private val context: Context) {
         val (input, w, h) = TextLines.detectionInput(img, 1600)
         val (prob, shape) = run(det!!, input, longArrayOf(1, 3, h.toLong(), w.toLong()))
         val pw = shape[shape.size - 1].toInt(); val ph = shape[shape.size - 2].toInt()
-        val boxes = TextLines.boxes(prob, pw, ph)
+        // seuils publiés avec le modèle (fichier de configuration du détecteur PP-OCRv6)
+        val boxes = TextLines.boxes(prob, pw, ph, thresh = 0.2f, boxThresh = 0.4f, unclip = 1.4f)
         val sx = img.w.toFloat() / pw; val sy = img.h.toFloat() / ph
         val words = ArrayList<OcrWord>(); val text = StringBuilder()
         for (b in boxes) {
