@@ -1,0 +1,109 @@
+name: Compilation de l'APK
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Outil de vérification des PDF
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+
+      - name: Modèles PP-OCR
+        run: tools/fetch_ppocr.sh
+
+      - name: Tests du moteur d'image
+        run: gradle :core:test --console=plain
+
+      - name: Compilation de l'APK
+        run: gradle :app:assembleRelease --console=plain
+
+      - name: Renommer l'APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/Feuillet-0.1.${GITHUB_RUN_NUMBER}.apk"
+          # nom fixe : sert au lien permanent releases/latest/download/Feuillet.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/Feuillet.apk
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Feuillet-apk
+          path: dist/*.apk
+
+      - name: Publier la version
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: Feuillet 0.1.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: false
+          make_latest: true
+          body: |
+            APK installable directement sur Android 8 ou plus récent.
+            Téléchargez le fichier `.apk` ci-dessous depuis le téléphone, ouvrez-le et autorisez l'installation.
+          files: dist/*.apk
+
+  essai-emulateur:
+    name: Essai de bout en bout sur émulateur
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Modèles PP-OCR
+        run: tools/fetch_ppocr.sh
+
+      - name: Activer l'accélération matérielle (KVM)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Scan, rendu, OCR et export sur un Android réel (émulé)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
+          script: gradle :app:connectedDebugAndroidTest --console=plain
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-essai-emulateur
+          path: app/build/reports/androidTests/
