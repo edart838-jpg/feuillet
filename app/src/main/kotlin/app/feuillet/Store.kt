@@ -32,6 +32,8 @@ data class Page(
     val contrast: Float = 0f,
     val deshadow: Boolean = true,
     val sharpen: Boolean = true,
+    /** Netteté par micro-réseau de neurones embarqué (texte ou photo selon le filtre). */
+    val ai: Boolean = true,
     /** Numéro de rendu : change à chaque nouveau fichier produit (sert à rafraîchir les images affichées). */
     val rev: Int = 0,
     val ready: Boolean = false,
@@ -43,7 +45,7 @@ data class Page(
     val ocrLangs: String? = null,
 ) {
     fun outline() = Outline(corners.toFloatArray(), curves.toFloatArray(), if (detected) 1f else 0f)
-    fun enhance() = EnhanceParams(filter, brightness, contrast, deshadow, sharpen)
+    fun enhance() = EnhanceParams(filter, brightness, contrast, deshadow, sharpen, ai)
 
     /** Vrai si la géométrie (et donc le texte reconnu) diffère de [other]. */
     fun geometryDiffers(other: Page) = corners != other.corners || curves != other.curves || useCurves != other.useCurves ||
@@ -193,7 +195,7 @@ class Store(context: Context) {
         put("detected", p.detected); put("useCurves", p.useCurves); put("strength", p.strength.toDouble())
         put("format", p.format.name); put("rotation", p.rotation); put("filter", p.filter.name)
         put("brightness", p.brightness.toDouble()); put("contrast", p.contrast.toDouble())
-        put("deshadow", p.deshadow); put("sharpen", p.sharpen); put("rev", p.rev); put("ready", p.ready)
+        put("deshadow", p.deshadow); put("sharpen", p.sharpen); put("ai", p.ai); put("rev", p.rev); put("ready", p.ready)
         put("outW", p.outW); put("outH", p.outH); put("widthMm", p.widthMm.toDouble()); put("heightMm", p.heightMm.toDouble())
         put("ocrText", p.ocrText ?: JSONObject.NULL); put("ocrLangs", p.ocrLangs ?: JSONObject.NULL)
     }
@@ -219,7 +221,7 @@ class Store(context: Context) {
         rotation = o.optInt("rotation"),
         filter = runCatching { Filter.valueOf(o.getString("filter")) }.getOrDefault(Filter.AUTO),
         brightness = o.optDouble("brightness", 0.0).toFloat(), contrast = o.optDouble("contrast", 0.0).toFloat(),
-        deshadow = o.optBoolean("deshadow", true), sharpen = o.optBoolean("sharpen", true),
+        deshadow = o.optBoolean("deshadow", true), sharpen = o.optBoolean("sharpen", true), ai = o.optBoolean("ai", true),
         rev = o.optInt("rev"), ready = o.optBoolean("ready"), outW = o.optInt("outW"), outH = o.optInt("outH"),
         widthMm = o.optDouble("widthMm", 210.0).toFloat(), heightMm = o.optDouble("heightMm", 297.0).toFloat(),
         ocrText = if (o.isNull("ocrText")) null else o.getString("ocrText"),

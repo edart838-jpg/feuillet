@@ -144,7 +144,7 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
                 store.doc(docId)?.pages?.forEach { other ->
                     if (other.id != pageId) {
                         store.updatePage(docId, other.id) {
-                            it.copy(filter = cur.filter, brightness = cur.brightness, contrast = cur.contrast, deshadow = cur.deshadow, sharpen = cur.sharpen)
+                            it.copy(filter = cur.filter, brightness = cur.brightness, contrast = cur.contrast, deshadow = cur.deshadow, sharpen = cur.sharpen, ai = cur.ai)
                         }
                         model.engine.render(docId, other.id)
                     }
@@ -322,13 +322,13 @@ private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
         original = f?.let { withContext(Dispatchers.Default) { it.toBitmap().asImageBitmap() } }
     }
     // 2. rendu : recalculé à chaque changement de filtre (avec un court délai pendant qu'un curseur bouge)
-    LaunchedEffect(flat, page.filter, page.brightness, page.contrast, page.deshadow, page.sharpen) {
+    LaunchedEffect(flat, page.filter, page.brightness, page.contrast, page.deshadow, page.sharpen, page.ai) {
         val f = flat ?: return@LaunchedEffect
         delay(60)
         preview = withContext(Dispatchers.Default) { Enhancer.apply(f, page.enhance()).toBitmap().asImageBitmap() }
     }
     // 3. vignettes des filtres
-    LaunchedEffect(flat, page.deshadow, page.sharpen) {
+    LaunchedEffect(flat, page.deshadow, page.sharpen, page.ai) {
         val f = flat ?: return@LaunchedEffect
         thumbs = withContext(Dispatchers.Default) {
             val small = f.downscale(170)
@@ -370,9 +370,14 @@ private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
             }
         }
         val tunable = page.filter != Filter.ORIGINAL
+        SectionLabel("Améliorations · calculées sur l'appareil", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
         Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill("Sans ombres", page.deshadow && tunable && page.filter != Filter.PHOTO, { onChange(page.copy(deshadow = !page.deshadow)) }, Modifier.weight(1f))
-            Pill("Texte net", page.sharpen && tunable && page.filter != Filter.BW, { onChange(page.copy(sharpen = !page.sharpen)) }, Modifier.weight(1f))
+            Pill(
+                if (page.filter == Filter.PHOTO) "Photo nette IA" else "Texte net IA", page.ai && tunable,
+                { onChange(page.copy(ai = !page.ai)) }, Modifier.weight(1f),
+            )
+            Pill("Accentuer", page.sharpen && !page.ai && tunable && page.filter != Filter.BW, { onChange(if (page.ai) page.copy(ai = false, sharpen = true) else page.copy(sharpen = !page.sharpen)) }, Modifier.weight(1f))
         }
         Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

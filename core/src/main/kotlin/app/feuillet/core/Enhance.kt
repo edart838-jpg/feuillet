@@ -18,6 +18,7 @@ enum class Filter(val label: String) {
  * @param brightness -1..1, @param contrast -1..1
  * @param deshadow retire ombres et dominante (fond de papier uniformisé)
  * @param sharpen accentuation du texte
+ * @param ai netteté par micro-réseau de neurones (remplace l'accentuation classique)
  */
 data class EnhanceParams(
     val filter: Filter = Filter.AUTO,
@@ -25,6 +26,7 @@ data class EnhanceParams(
     val contrast: Float = 0f,
     val deshadow: Boolean = true,
     val sharpen: Boolean = true,
+    val ai: Boolean = false,
 )
 
 object Enhancer {
@@ -38,10 +40,15 @@ object Enhancer {
             Filter.AUTO -> { if (p.deshadow) flatten(out); curve(out, 0.06f, 0.96f, 1.08f) }
             Filter.COLOR -> { if (p.deshadow) flatten(out); curve(out, 0.05f, 0.95f, 1.05f); saturate(out, 1.4f) }
             Filter.GRAY -> { if (p.deshadow) flatten(out); curve(out, 0.06f, 0.96f, 1.08f); saturate(out, 0f) }
-            Filter.BW -> { if (p.deshadow) flatten(out); binarize(out) }
+            Filter.BW -> {
+                if (p.deshadow) flatten(out)
+                if (p.ai) MicroNet.apply(out, MicroNet.Kind.TEXT)
+                binarize(out)
+            }
         }
-        if (p.sharpen && p.filter != Filter.ORIGINAL && p.filter != Filter.BW) {
-            unsharp(out, if (p.filter == Filter.PHOTO) 0.35f else 0.7f)
+        if (p.filter != Filter.ORIGINAL && p.filter != Filter.BW) {
+            if (p.ai) MicroNet.apply(out, if (p.filter == Filter.PHOTO) MicroNet.Kind.PHOTO else MicroNet.Kind.TEXT)
+            else if (p.sharpen) unsharp(out, if (p.filter == Filter.PHOTO) 0.35f else 0.7f)
         }
         if (p.brightness != 0f || p.contrast != 0f) tone(out, p.brightness, p.contrast)
         return out

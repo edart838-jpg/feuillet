@@ -194,6 +194,66 @@ class CoreTest {
         assertTrue(Enhancer.isGray(out))
     }
 
+    // ---- micro-réseaux ----
+
+    /** Texte net dessiné par Java2D, puis version floutée et bruitée de la même image. */
+    private fun textPair(): Pair<Raster, Raster> {
+        val w = 420; val h = 200
+        val b = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+        val g = b.createGraphics()
+        g.color = java.awt.Color(250, 250, 250); g.fillRect(0, 0, w, h)
+        g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        g.color = java.awt.Color(30, 30, 30)
+        g.font = java.awt.Font(java.awt.Font.SERIF, java.awt.Font.PLAIN, 26); g.drawString("Devis n° 2026-118 : chêne massif", 12, 50)
+        g.font = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 18); g.drawString("Total hors taxes 3 596,00 € — règlement", 12, 100)
+        g.font = java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.BOLD, 20); g.drawString("ABCDEFG abcdefg 0123456789", 12, 150)
+        g.dispose()
+        val clean = Raster(w, h, b.getRGB(0, 0, w, h, null, 0, w))
+        val soft = clean.luma().boxBlur(1).boxBlur(1)
+        val rnd = java.util.Random(5)
+        val blurred = Raster(w, h, IntArray(w * h) { i ->
+            val v = (soft.d[i] + rnd.nextGaussian() * 2.5).toInt().coerceIn(0, 255)
+            (255 shl 24) or (v shl 16) or (v shl 8) or v
+        })
+        return clean to blurred
+    }
+
+    private fun rmse(a: Raster, b: Raster): Double {
+        var s = 0.0
+        for (i in a.px.indices) { val d = ((a.px[i] shr 8) and 255) - ((b.px[i] shr 8) and 255); s += d * d }
+        return kotlin.math.sqrt(s / a.px.size)
+    }
+
+    @Test
+    fun leMicroReseauTexteRendLeTexteFlouPlusFidele() {
+        val (clean, blurred) = textPair()
+        val before = rmse(blurred, clean)
+        val ai = Raster(blurred.w, blurred.h, blurred.px.copyOf()).also { MicroNet.apply(it, MicroNet.Kind.TEXT) }
+        val after = rmse(ai, clean)
+        assertTrue(after < before * 0.8, "erreur avant $before, après $after : le réseau doit rapprocher l'image du texte net")
+        // et il doit faire mieux que l'accentuation classique
+        val classic = Enhancer.apply(blurred, EnhanceParams(Filter.PHOTO, deshadow = false, sharpen = true))
+        assertTrue(after < rmse(classic, clean), "le réseau doit battre l'accentuation classique")
+    }
+
+    @Test
+    fun leMicroReseauLaisseLePapierViergeIntact() {
+        val blank = Raster(120, 90, IntArray(120 * 90) { 0xFFF6F4EE.toInt() })
+        val copy = blank.px.copyOf()
+        MicroNet.apply(blank, MicroNet.Kind.TEXT)
+        assertTrue(blank.px.contentEquals(copy))
+        assertEquals(737, MicroNetWeights.COUNT)
+        assertEquals(737, MicroNetWeights.TEXT.size); assertEquals(737, MicroNetWeights.PHOTO.size)
+    }
+
+    @Test
+    fun leMicroReseauPhotoResteStableSurUnDegrade() {
+        val w = 160; val h = 120
+        val img = Raster(w, h, IntArray(w * h) { i -> val v = (i % w) * 255 / w; (255 shl 24) or (v shl 16) or (v shl 8) or v })
+        val out = Raster(w, h, img.px.copyOf()).also { MicroNet.apply(it, MicroNet.Kind.PHOTO) }
+        assertTrue(rmse(out, img) < 3.0, "un dégradé lisse ne doit presque pas changer : ${rmse(out, img)}")
+    }
+
     @Test
     fun rotationParQuartsDeTour() {
         val r = Raster(3, 2, intArrayOf(1, 2, 3, 4, 5, 6))
