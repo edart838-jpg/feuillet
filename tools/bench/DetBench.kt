@@ -6,7 +6,6 @@ import java.awt.image.BufferedImage
 fun load(p: String): Raster { val b = ImageIO.read(File(p)); val w=b.width; val h=b.height
   return Raster(w,h,b.getRGB(0,0,w,h,null,0,w)) }
 fun save(r: Raster, p: String) { val b = BufferedImage(r.w,r.h,BufferedImage.TYPE_INT_RGB); b.setRGB(0,0,r.w,r.h,r.px,0,r.w); ImageIO.write(b, if (p.endsWith("png")) "png" else "jpg", File(p)) }
-fun main(args: Array<String>) {
 
 object DetBench { @JvmStatic fun main(a: Array<String>) {
   val dir = a[0]; val verbose = a.size > 1
