@@ -2,6 +2,7 @@ import app.feuillet.core.*
 import java.io.File
 import javax.imageio.ImageIO
 import java.awt.image.BufferedImage
+import kotlin.math.hypot
 
 fun load(p: String): Raster { val b = ImageIO.read(File(p)); val w=b.width; val h=b.height
   return Raster(w,h,b.getRGB(0,0,w,h,null,0,w)) }
