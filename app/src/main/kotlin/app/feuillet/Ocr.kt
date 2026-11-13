@@ -135,13 +135,18 @@ class Languages(private val context: Context) {
 class OcrResult(val text: String, val words: List<OcrWord>)
 
 /** Reconnaissance de texte hors ligne (Tesseract). Un seul moteur, sur un fil dédié. */
-class Ocr(private val languages: Languages) {
+class Ocr(private val languages: Languages, private val ppOcr: PpOcr? = null, private val preferPpOcr: () -> Boolean = { false }) {
     private val thread = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     private var api: TessBaseAPI? = null
     private var apiLangs = ""
 
     /** Reconnaît le texte d'une page. Renvoie null si aucune langue demandée n'est installée ou si le moteur échoue. */
     suspend fun recognize(bitmap: Bitmap, langs: List<String>): OcrResult? = withContext(thread) {
+        // PP-OCR d'abord quand il est choisi et présent ; Tesseract prend le relais s'il échoue ou ne lit rien
+        if (ppOcr != null && preferPpOcr() && ppOcr.available) {
+            val viaPp = runCatching { ppOcr.recognize(bitmap) }.getOrNull()
+            if (viaPp != null && viaPp.words.isNotEmpty()) return@withContext viaPp
+        }
         val usable = langs.filter { it in languages.installed }
         if (usable.isEmpty()) return@withContext null
         val key = usable.joinToString("+")

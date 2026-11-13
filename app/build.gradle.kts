@@ -56,7 +56,7 @@ android {
         )
     }
     buildFeatures { compose = true }
-    androidResources { noCompress += listOf("traineddata") }
+    androidResources { noCompress += listOf("traineddata", "onnx") }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     lint {
         checkReleaseBuilds = false
@@ -83,6 +83,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.4")
 
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.1")
 
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

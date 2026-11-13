@@ -31,6 +31,9 @@ jobs:
       - name: Outil de vérification des PDF
         run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
 
+      - name: Modèles PP-OCR
+        run: tools/fetch_ppocr.sh
+
       - name: Tests du moteur d'image
         run: gradle :core:test --console=plain
 
@@ -79,6 +82,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+
+      - name: Modèles PP-OCR
+        run: tools/fetch_ppocr.sh
 
       - name: Activer l'accélération matérielle (KVM)
         run: |

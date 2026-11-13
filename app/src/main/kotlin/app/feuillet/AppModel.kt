@@ -22,7 +22,8 @@ sealed interface Screen {
 class AppModel(app: Application) : AndroidViewModel(app) {
     val store = Store(app)
     val languages = Languages(app)
-    val ocr = Ocr(languages)
+    val ppOcr = PpOcr(app)
+    val ocr = Ocr(languages, ppOcr) { store.ocrEngine == "ppocr" }
     val engine = Engine(store)
     val exporter = Exporter(app, store, ocr)
 

@@ -72,7 +72,7 @@ class Exporter(private val context: Context, private val store: Store, private v
         val texts = HashMap<String, String>()
         if (needText) {
             val langs = store.ocrLangs
-            val key = langs.joinToString("+")
+            val key = store.ocrKey
             for ((i, p) in pages.withIndex()) {
                 onProgress("Reconnaissance du texte · page ${i + 1} sur ${pages.size}", i.toFloat() / pages.size * 0.6f)
                 if (p.ocrText != null && p.ocrLangs == key && store.wordsFile(req.doc.id, p.id).exists()) { texts[p.id] = p.ocrText; continue }

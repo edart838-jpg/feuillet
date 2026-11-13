@@ -58,7 +58,8 @@ class EndToEndTest {
         val store = Store(context)
         val engine = Engine(store)
         val languages = Languages(context)
-        val ocr = Ocr(languages)
+        val ppOcr = PpOcr(context)
+        val ocr = Ocr(languages, ppOcr) { true }
         val exporter = Exporter(context, store, ocr)
         assertEquals(listOf("eng", "fra"), languages.installed)
 
@@ -70,6 +71,14 @@ class EndToEndTest {
         assertTrue(store.outFile(docId, done.id).length() > 50_000)
         assertTrue(store.thumbFile(docId, done.id).exists())
         assertTrue("page en portrait attendue : ${done.outW}×${done.outH}", done.outH > done.outW && done.outW > 600)
+
+        // PP-OCR embarqué : il doit être présent et lire la page rendue
+        assertTrue("les modèles PP-OCR doivent être inclus dans l'application", ppOcr.available)
+        val rendered = android.graphics.BitmapFactory.decodeFile(store.outFile(docId, done.id).path)
+        val read = ppOcr.recognize(rendered)
+        rendered.recycle()
+        assertTrue("PP-OCR n'a trouvé que ${read.words.size} lignes : ${read.text.take(300)}", read.words.size >= 8)
+        assertTrue("texte lu par PP-OCR inattendu : ${read.text.take(400)}", read.text.contains("Mercier", ignoreCase = true) && read.text.contains("devis", ignoreCase = true))
 
         // une seconde page, en noir et blanc, pour les exports multipages
         val second = assertNotNullValue(engine.importPhoto(docId, photo(), deleteSource = true))
@@ -114,7 +123,7 @@ class EndToEndTest {
             // réglages et modules de langues
             compose.onNodeWithContentDescription("Réglages et langues").performClick()
             compose.waitUntilAtLeastOneExists(hasText("Français"), 10_000)
-            compose.onNodeWithText("LANGUES INSTALLÉES").assertIsDisplayed()
+            compose.onNodeWithText("LANGUES INSTALLÉES", substring = true).assertIsDisplayed()
             compose.onNodeWithContentDescription("Retour").performClick()
 
             // document, puis réglage d'une page

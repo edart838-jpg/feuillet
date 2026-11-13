@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ fun SettingsScreen(model: AppModel) {
     var format by remember { mutableStateOf(store.defaultFormat) }
     var active by remember { mutableStateOf(store.ocrLangs) }
     var error by remember { mutableStateOf<String?>(null) }
+    var engine by remember { mutableStateOf(store.ocrEngine) }
 
     fun setActive(code: String, on: Boolean) {
         val next = if (on) (active + code).distinct() else active - code
@@ -70,7 +72,19 @@ fun SettingsScreen(model: AppModel) {
                 )
             }
             item {
-                SectionLabel("Langues installées", Modifier.padding(top = 16.dp, bottom = 4.dp))
+                SectionLabel("Moteur de reconnaissance du texte", Modifier.padding(top = 16.dp, bottom = 4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill("PP-OCR embarqué", engine == "ppocr", { engine = "ppocr"; store.ocrEngine = "ppocr" }, enabledHint(model.ppOcr.available))
+                    Pill("Tesseract", engine != "ppocr", { engine = "tesseract"; store.ocrEngine = "tesseract" })
+                }
+                Text(
+                    if (model.ppOcr.available) "PP-OCR lit les langues à alphabet latin, le chinois et le japonais sans réglage. Tesseract sert pour les autres langues (modules ci-dessous) et prend le relais si PP-OCR ne lit rien."
+                    else "PP-OCR n'est pas inclus dans cette version : Tesseract est utilisé.",
+                    color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            item {
+                SectionLabel("Langues installées (Tesseract)", Modifier.padding(top = 16.dp, bottom = 4.dp))
                 Text("Cochez les langues à reconnaître dans vos documents. Moins il y en a, plus la reconnaissance est rapide.", color = C.Muted, fontSize = 12.sp)
                 error?.let { Text(it, color = C.Danger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
             }
@@ -131,3 +145,5 @@ private fun LangRow(content: @Composable androidx.compose.foundation.layout.RowS
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), content = content,
     )
 }
+
+private fun enabledHint(available: Boolean): Modifier = if (available) Modifier else Modifier.alpha(0.4f)

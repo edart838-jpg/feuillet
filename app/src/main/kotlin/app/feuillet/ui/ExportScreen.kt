@@ -117,7 +117,8 @@ fun ExportScreen(model: AppModel, docId: String) {
                 }
                 if (ExportFormat.PDF_OCR in formats || ExportFormat.TEXT in formats) {
                     Text(
-                        "Texte reconnu en : ${store.ocrLangs.joinToString(", ") { model.languages.name(it) }}. Autres langues dans les réglages.",
+                        if (store.ocrEngine == "ppocr" && model.ppOcr.available) "Texte reconnu par PP-OCR, sur l'appareil. Moteur et langues dans les réglages."
+                        else "Texte reconnu en : ${store.ocrLangs.joinToString(", ") { model.languages.name(it) }}. Autres langues dans les réglages.",
                         color = C.Muted, fontSize = 12.sp,
                     )
                 }

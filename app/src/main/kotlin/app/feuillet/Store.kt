@@ -83,6 +83,14 @@ class Store(context: Context) {
         get() = prefs.getString("langs", "fra+eng")!!.split("+").filter { it.isNotBlank() }
         set(v) = prefs.edit().putString("langs", v.joinToString("+")).apply()
 
+    /** Moteur de reconnaissance : « ppocr » (embarqué, par défaut) ou « tesseract ». */
+    var ocrEngine: String
+        get() = prefs.getString("engine", "ppocr")!!
+        set(v) = prefs.edit().putString("engine", v).apply()
+
+    /** Clé du texte reconnu : change quand le moteur ou les langues changent, pour relancer la reconnaissance. */
+    val ocrKey: String get() = if (ocrEngine == "ppocr") "ppocr" else ocrLangs.joinToString("+")
+
     init {
         load()
     }

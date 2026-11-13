@@ -389,6 +389,47 @@ class CoreTest {
         assertTrue(rmse(out, img) < 3.0, "un dégradé lisse ne doit presque pas changer : ${rmse(out, img)}")
     }
 
+    // ---- lignes de texte (OCR à deux étages) ----
+
+    @Test
+    fun lignesDeTexteExtraitesDeLaCarteDeProbabilite() {
+        val w = 200; val h = 100
+        val prob = FloatArray(w * h)
+        fun fill(x0: Int, x1: Int, y0: Int, y1: Int, v: Float) { for (y in y0..y1) for (x in x0..x1) prob[y * w + x] = v }
+        fill(20, 150, 20, 27, 0.9f)       // ligne du haut
+        fill(110, 180, 60, 67, 0.95f)     // ligne du bas, à droite
+        fill(20, 90, 61, 68, 0.9f)        // ligne du bas, à gauche
+        fill(5, 30, 85, 90, 0.4f)         // région trop incertaine : rejetée
+        val boxes = TextLines.boxes(prob, w, h)
+        assertEquals(3, boxes.size)
+        assertTrue(boxes[0].y1 < 40, "la première boîte est la ligne du haut")
+        assertTrue(boxes[0].y0 < 20 && boxes[0].y1 > 27, "la boîte doit être regonflée autour de la région rétrécie")
+        assertTrue(boxes[1].x0 < boxes[2].x0, "ordre de lecture : gauche avant droite sur une même ligne")
+    }
+
+    @Test
+    fun decodageCtc() {
+        // classes : 0 blanc, 1 « a », 2 « b », 3 espace (hors alphabet)
+        val seq = intArrayOf(0, 1, 1, 0, 1, 2, 2, 3, 0, 2)
+        val scores = FloatArray(seq.size * 4)
+        for ((t, c) in seq.withIndex()) scores[t * 4 + c] = 0.9f
+        val (text, conf) = TextLines.ctcDecode(scores, seq.size, 4, listOf("a", "b"))
+        assertEquals("aab b", text)
+        assertEquals(0.9f, conf, 1e-6f)
+    }
+
+    @Test
+    fun entreesDesReseauxOcr() {
+        val img = Raster(100, 50, IntArray(5000) { 0xFF0000FF.toInt() })          // bleu pur
+        val (det, dw, dh) = TextLines.detectionInput(img)
+        assertEquals(96, dw); assertEquals(32, dh); assertEquals(3 * 96 * 32, det.size)
+        assertEquals((1f - 0.485f) / 0.229f, det[0], 1e-4f)                         // premier canal : bleu
+        assertEquals((0f - 0.406f) / 0.225f, det[2 * 96 * 32], 1e-4f)               // dernier canal : rouge
+        val (rec, rw) = TextLines.recognitionInput(img, 10, 10, 89, 29)
+        assertEquals(192, rw); assertEquals(3 * 192 * 48, rec.size)
+        assertEquals(1f, rec[0], 1e-4f); assertEquals(-1f, rec[2 * 192 * 48], 1e-4f)
+    }
+
     @Test
     fun rotationParQuartsDeTour() {
         val r = Raster(3, 2, intArrayOf(1, 2, 3, 4, 5, 6))
