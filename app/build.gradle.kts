@@ -17,6 +17,7 @@ android {
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // Clé de signature versionnée : elle garantit que chaque nouvel APK s'installe par-dessus le précédent
@@ -37,6 +38,8 @@ android {
         }
         debug {
             signingConfig = signingConfigs.getByName("sideload")
+            // l'émulateur de l'intégration continue est en x86_64 ; l'APK publié reste en ARM seul
+            ndk { abiFilters += "x86_64" }
         }
     }
 
@@ -80,4 +83,11 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.4")
 
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
+
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
