@@ -1,7 +1,10 @@
 package app.feuillet
 
 import android.app.Application
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +27,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     val exporter = Exporter(app, store, ocr)
 
     val stack = mutableStateListOf<Screen>(Screen.Library)
+
+    /** Page photographiée en attente de validation (écrans Bords puis Rendu) ; pas encore dans le document. */
+    var draft by mutableStateOf<Page?>(null)
 
     /** Portée des travaux qui doivent survivre à un changement d'écran (import, export, téléchargement). */
     val scope: CoroutineScope get() = viewModelScope

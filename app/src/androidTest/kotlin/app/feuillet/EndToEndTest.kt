@@ -107,7 +107,7 @@ class EndToEndTest {
     @Test
     fun b_parcoursDesEcrans() {
         // s'appuie sur le document créé par le premier essai
-        ActivityScenario.launch(MainActivity::class.java).use {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             compose.waitUntilAtLeastOneExists(hasText("Feuillet"), 20_000)
             compose.onNodeWithText("Nouveau scan").assertIsDisplayed()
 
@@ -130,9 +130,32 @@ class EndToEndTest {
             compose.onNodeWithText("Couleurs et rendu").performClick()
             compose.waitUntilAtLeastOneExists(hasContentDescription("Aperçu de la page"), 60_000)
             compose.onNodeWithText("Gris").performClick()
-            compose.onNodeWithText("Suivant").performClick()
-            compose.waitUntilAtLeastOneExists(hasText("Page 2 sur 2"), 10_000)
             compose.onNodeWithText("Terminer").performClick()
+
+            // pivoter une page depuis le document
+            compose.waitUntilAtLeastOneExists(hasText("Page suivante"), 10_000)
+            compose.onNodeWithContentDescription("Pivoter la page 2").performClick()
+
+            // nouvelle page : après la photo, l'écran des bords s'ouvre ; la page n'entre au document qu'à la validation
+            var before = 0
+            scenario.onActivity { before = it.model.store.docs.first().pages.size }
+            val docId = "essai"
+            val fresh = kotlinx.coroutines.runBlocking {
+                var engine: Engine? = null
+                scenario.onActivity { engine = it.model.engine }
+                engine!!.preparePage(docId, photo(), deleteSource = true)
+            }
+            assertNotNull(fresh)
+            scenario.onActivity { it.model.draft = fresh; it.model.push(Screen.Edit(docId, fresh!!.id)) }
+            compose.waitUntilAtLeastOneExists(hasText("Nouvelle page"), 10_000)
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Photo d'origine"), 20_000)
+            scenario.onActivity { assertEquals(before, it.model.store.docs.first().pages.size) }
+            // le rendu de la dernière page du document (noir et blanc) est repris par défaut
+            assertEquals(Filter.BW, fresh!!.filter)
+            compose.onNodeWithText("Ajouter au document").performClick()
+            compose.waitUntilAtLeastOneExists(hasText("Page suivante"), 10_000)
+            scenario.onActivity { assertEquals(before + 1, it.model.store.docs.first().pages.size) }
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Page ${before + 1}"), 10_000)
 
             // export depuis l'interface
             compose.waitUntilAtLeastOneExists(hasText("Exporter"), 10_000)
@@ -145,10 +168,11 @@ class EndToEndTest {
 
             // écran de capture : l'appareil photo s'ouvre sans plantage
             compose.waitUntilAtLeastOneExists(hasText("Nouveau scan"), 10_000)
+            scenario.onActivity { it.model.store.autoCapture = false }      // la scène virtuelle ne doit pas déclencher de prise
             compose.onNodeWithText("Nouveau scan").performClick()
             compose.waitUntilAtLeastOneExists(hasText("Capture auto"), 15_000)
             Thread.sleep(4000)
-            compose.onNodeWithText("Terminer").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Importer depuis la galerie").assertIsDisplayed()
             compose.onNodeWithContentDescription("Fermer").performClick()
             compose.waitUntilAtLeastOneExists(hasText("Nouveau scan"), 10_000)
         }

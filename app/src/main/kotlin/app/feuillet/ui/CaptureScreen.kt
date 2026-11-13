@@ -109,7 +109,6 @@ fun CaptureScreen(model: AppModel, docId: String) {
     val activity = context as ComponentActivity
     val store = model.store
     val doc = store.doc(docId)
-    val startCount = remember { store.doc(docId)?.pages?.size ?: 0 }
 
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
@@ -129,17 +128,15 @@ fun CaptureScreen(model: AppModel, docId: String) {
     // état du déclenchement automatique, manipulé par le fil d'analyse
     val auto2 = remember { object { var last: Outline? = null; var count = 0; var armed = true; var lastShot: Outline? = null; var shooting = false } }
 
+    /** Quitte le viseur : vers le document en construction s'il a déjà des pages, sinon retour simple. */
     fun finish() {
         val d = store.doc(docId)
-        if (d == null || d.pages.isEmpty()) { model.pop(); return }
-        val firstNew = d.pages.getOrNull(startCount) ?: d.pages.last()
         model.pop()
-        if (model.stack.none { it == Screen.Document(docId) }) model.push(Screen.Document(docId))
-        model.push(Screen.Edit(docId, firstNew.id))
+        if (d != null && d.pages.isNotEmpty() && model.stack.last() != Screen.Document(docId)) model.push(Screen.Document(docId))
     }
 
     fun shoot() {
-        if (auto2.shooting) return
+        if (auto2.shooting || busy > 0) return
         auto2.shooting = true; busy++
         val file = File(context.cacheDir, "capture_${System.nanoTime()}.jpg")
         capture.takePicture(
@@ -148,9 +145,11 @@ fun CaptureScreen(model: AppModel, docId: String) {
                 override fun onImageSaved(result: ImageCapture.OutputFileResults) {
                     auto2.shooting = false; auto2.lastShot = auto2.last; auto2.armed = false; auto2.count = 0
                     model.scope.launch {
-                        val page = model.engine.importPhoto(docId, file, deleteSource = true)
+                        // une page à la fois : la photo s'ouvre aussitôt sur l'écran des bords
+                        val page = model.engine.preparePage(docId, file, deleteSource = true)
                         busy--
-                        message = if (page == null) "Photo illisible, réessayez." else if (!page.detected) "Bords non trouvés : à ajuster à la main." else null
+                        if (page == null) message = "Photo illisible, réessayez."
+                        else if (model.stack.last() == Screen.Capture(docId)) { model.draft = page; model.replace(Screen.Edit(docId, page.id)) }
                     }
                 }
 
@@ -170,6 +169,7 @@ fun CaptureScreen(model: AppModel, docId: String) {
                 val page = if (input != null) model.engine.importStream(docId, input, context.cacheDir) else null
                 busy--
                 if (page == null) message = "Une image n'a pas pu être importée."
+                else if (busy == 0 && model.stack.last() == Screen.Capture(docId)) finish()
             }
         }
     }
@@ -252,7 +252,7 @@ fun CaptureScreen(model: AppModel, docId: String) {
                     for (k in 0 until 4) drawCircle(C.Accent, 6.dp.toPx(), Offset(ox + o.corners[2 * k] * iw, oy + o.corners[2 * k + 1] * ih))
                 }
                 val status = when {
-                    busy > 0 && outline == null -> "Enregistrement…"
+                    busy > 0 -> "Recadrage de la page…"
                     outline == null -> "Cherche la page…"
                     auto && stable >= 2 -> "Page détectée · ne bougez plus"
                     else -> "Page détectée"
@@ -304,7 +304,7 @@ fun CaptureScreen(model: AppModel, docId: String) {
             )
             Spacer(Modifier.weight(1f))
             Box(Modifier.width(110.dp), contentAlignment = Alignment.CenterEnd) {
-                BigButton(if (busy > 0) "…" else "Terminer", { finish() }, height = 48.dp, enabled = busy == 0)
+                if ((doc?.pages?.size ?: 0) > 0) BigButton(if (busy > 0) "…" else "Document", { finish() }, height = 48.dp, enabled = busy == 0)
             }
         }
     }

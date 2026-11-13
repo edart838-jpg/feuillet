@@ -3,7 +3,7 @@ package app.feuillet.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,10 +18,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -72,25 +71,37 @@ fun DocumentScreen(model: AppModel, docId: String) {
             itemsIndexed(doc.pages, key = { _, p -> p.id }) { i, p ->
                 val thumb = rememberBitmap(store.thumbFile(docId, p.id), 480, p.rev)
                 val shape = RoundedCornerShape(12.dp)
-                Box(
-                    Modifier.fillMaxWidth().aspectRatio(0.72f).clip(shape).background(C.Surface).border(1.dp, C.Line, shape)
-                        .combinedClickable(onClick = { model.push(Screen.Edit(docId, p.id)) }, onLongClick = { pageMenu = p }),
-                ) {
-                    if (thumb != null) Image(thumb, contentDescription = "Page ${i + 1}", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(6.dp))
-                    if (!p.ready) CircularProgressIndicator(Modifier.align(Alignment.Center), color = C.Accent)
-                    Text(
-                        "${i + 1}", color = C.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xE60E1014)).padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
+                fun moveTo(j: Int) {
+                    val list = doc.pages.toMutableList(); list.removeAt(i); list.add(j, p)
+                    store.upsert(doc.copy(pages = list))
+                }
+                Column(Modifier.fillMaxWidth().clip(shape).background(C.Surface).border(1.dp, C.Line, shape)) {
+                    Box(Modifier.fillMaxWidth().aspectRatio(0.78f).clickable(onClickLabel = "Régler la page ${i + 1}") { model.push(Screen.Edit(docId, p.id)) }) {
+                        if (thumb != null) Image(thumb, contentDescription = "Page ${i + 1}", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(6.dp))
+                        if (!p.ready) CircularProgressIndicator(Modifier.align(Alignment.Center), color = C.Accent)
+                        Text(
+                            "${i + 1}", color = C.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xE60E1014)).padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        IconBtn(Ic.Up, "Avancer la page ${i + 1}", { if (i > 0) moveTo(i - 1) }, size = 40.dp, radius = 10.dp, background = Color.Transparent, modifier = Modifier.alpha(if (i > 0) 1f else 0.3f))
+                        IconBtn(Ic.Down, "Reculer la page ${i + 1}", { if (i < doc.pages.size - 1) moveTo(i + 1) }, size = 40.dp, radius = 10.dp, background = Color.Transparent, modifier = Modifier.alpha(if (i < doc.pages.size - 1) 1f else 0.3f))
+                        IconBtn(Ic.Rotate, "Pivoter la page ${i + 1}", {
+                            store.updatePage(docId, p.id) { it.copy(rotation = (it.rotation + 1) % 4, ocrText = null, ocrLangs = null) }
+                            model.engine.render(docId, p.id)
+                        }, size = 40.dp, radius = 10.dp, background = Color.Transparent)
+                        IconBtn(Ic.Trash, "Supprimer la page ${i + 1}", { pageMenu = p }, size = 40.dp, radius = 10.dp, background = Color.Transparent)
+                    }
                 }
             }
             item(span = { GridItemSpan(2) }) {
-                Text("Touchez une page pour régler ses bords et son rendu. Appui long : déplacer ou supprimer.", color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                Text("Touchez une page pour revoir ses bords et son rendu. Sous chaque page : avancer, reculer, pivoter, supprimer.", color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            BigButton("Ajouter", { model.push(Screen.Capture(docId)) }, Modifier.weight(1f), primary = false, icon = Ic.Plus)
-            BigButton("Exporter", { model.push(Screen.Export(docId)) }, Modifier.weight(1f), icon = Ic.Share, enabled = doc.pages.isNotEmpty())
+            BigButton("Page suivante", { model.push(Screen.Capture(docId)) }, Modifier.weight(1.3f), icon = Ic.Scan)
+            BigButton("Exporter", { model.push(Screen.Export(docId)) }, Modifier.weight(1f), primary = false, icon = Ic.Share, enabled = doc.pages.isNotEmpty())
         }
     }
 
@@ -104,22 +115,8 @@ fun DocumentScreen(model: AppModel, docId: String) {
     }
     pageMenu?.let { p ->
         val i = doc.pages.indexOfFirst { it.id == p.id }
-        fun moveTo(j: Int) {
-            val list = doc.pages.toMutableList(); list.removeAt(i); list.add(j, p)
-            store.upsert(doc.copy(pages = list)); pageMenu = null
+        ConfirmDialog("Supprimer la page ${i + 1} ?", "La page sera retirée du document et effacée de l'appareil.", "Supprimer", { pageMenu = null }) {
+            store.deletePage(docId, p.id); pageMenu = null
         }
-        AlertDialog(
-            onDismissRequest = { pageMenu = null },
-            title = { Text("Page ${i + 1}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (i > 0) Pill("Monter d'un rang", false, { moveTo(i - 1) }, Modifier.fillMaxWidth())
-                    if (i < doc.pages.size - 1) Pill("Descendre d'un rang", false, { moveTo(i + 1) }, Modifier.fillMaxWidth())
-                    Pill("Supprimer cette page", false, { store.deletePage(docId, p.id); pageMenu = null }, Modifier.fillMaxWidth())
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { pageMenu = null }) { Text("Annuler") } },
-        )
     }
 }

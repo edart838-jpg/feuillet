@@ -19,7 +19,7 @@ import app.feuillet.ui.LibraryScreen
 import app.feuillet.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
-    private val model: AppModel by viewModels()
+    internal val model: AppModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

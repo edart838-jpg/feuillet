@@ -65,24 +65,36 @@ class Engine(private val store: Store) {
     }
 
     /**
-     * Ajoute une photo au document : la copie redressée dans la bibliothèque, détecte la page,
-     * puis lance le rendu en arrière-plan. Renvoie la page créée (ou null si l'image est illisible).
+     * Prépare une page à partir d'une photo : copie redressée dans la bibliothèque et détection des bords.
+     * La page reprend les réglages de la dernière page du document (format, courbure, rendu), mais elle
+     * n'est PAS ajoutée au document : c'est à l'appelant de le faire. Null si l'image est illisible.
      */
-    suspend fun importPhoto(docId: String, source: File, deleteSource: Boolean): Page? = withContext(Dispatchers.IO) {
+    suspend fun preparePage(docId: String, source: File, deleteSource: Boolean): Page? = withContext(Dispatchers.IO) {
         val bmp = decode(source, 3600) ?: return@withContext null
         if (deleteSource) source.delete()
-        val page0 = Page(corners = emptyList(), curves = emptyList(), detected = false, format = store.defaultFormat)
-        store.srcFile(docId, page0.id).outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+        val prev = store.doc(docId)?.pages?.lastOrNull()
+        val base = Page(corners = emptyList(), curves = emptyList(), detected = false, format = prev?.format ?: store.defaultFormat).let { p ->
+            if (prev == null) p else p.copy(
+                useCurves = prev.useCurves, strength = prev.strength, filter = prev.filter, brightness = prev.brightness,
+                contrast = prev.contrast, deshadow = prev.deshadow, sharpen = prev.sharpen, ai = prev.ai,
+            )
+        }
+        store.srcFile(docId, base.id).outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 95, it) }
         val small = Bitmap.createScaledBitmap(bmp, max(1, bmp.width * 800 / max(bmp.width, bmp.height)), max(1, bmp.height * 800 / max(bmp.width, bmp.height)), true)
         bmp.recycle()
         val outline = Detector.detect(small.toRaster())
         small.recycle()
         val o = outline ?: Outline.fullFrame()
-        val page = page0.copy(corners = o.corners.toList(), curves = o.curves.toList(), detected = outline != null)
+        base.copy(corners = o.corners.toList(), curves = o.curves.toList(), detected = outline != null)
+    }
+
+    /** Ajoute directement une photo au document (import depuis la galerie) et lance son rendu. */
+    suspend fun importPhoto(docId: String, source: File, deleteSource: Boolean): Page? {
+        val page = preparePage(docId, source, deleteSource) ?: return null
         val doc = store.doc(docId) ?: Doc(id = docId, title = Store.defaultTitle())
         store.upsert(doc.copy(pages = doc.pages + page))
         render(docId, page.id)
-        page
+        return page
     }
 
     suspend fun importStream(docId: String, input: InputStream, cacheDir: File): Page? {

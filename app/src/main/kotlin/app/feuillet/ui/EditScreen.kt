@@ -81,9 +81,12 @@ import kotlin.math.roundToInt
 fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Boolean) {
     val store = model.store
     val doc = store.doc(docId)
-    val stored = doc?.pages?.firstOrNull { it.id == pageId }
-    if (doc == null || stored == null) { LaunchedEffect(Unit) { model.pop() }; return }
-    val index = doc.pages.indexOfFirst { it.id == pageId }
+    // page tout juste photographiée : elle n'entre dans le document qu'après validation
+    val draft = model.draft?.takeIf { it.id == pageId }
+    val isDraft = draft != null
+    val stored = draft ?: doc?.pages?.firstOrNull { it.id == pageId }
+    if (stored == null) { LaunchedEffect(Unit) { model.pop() }; return }
+    val index = doc?.pages?.indexOfFirst { it.id == pageId } ?: -1
 
     var page by remember(pageId) { mutableStateOf(stored) }
     var renderTab by remember(pageId) { mutableStateOf(startOnRender) }
@@ -113,16 +116,28 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
         model.engine.render(docId, pageId)
     }
 
-    fun leave() { commit(); model.pop() }
+    /** Abandonne la page en cours de validation (photo effacée). */
+    fun discard() {
+        store.srcFile(docId, pageId).delete()
+        model.draft = null
+    }
+
+    /** Valide la page : elle rejoint le document, puis on affiche le document en construction. */
+    fun addToDocument() {
+        val d = store.doc(docId) ?: app.feuillet.Doc(id = docId, title = app.feuillet.Store.defaultTitle())
+        store.upsert(d.copy(pages = d.pages + page.copy(ready = false)))
+        model.engine.render(docId, pageId)
+        model.draft = null
+        model.pop()
+        if (model.stack.last() != app.feuillet.Screen.Document(docId)) model.push(app.feuillet.Screen.Document(docId))
+    }
+
+    fun leave() { if (isDraft) discard() else commit(); model.pop() }
     BackHandler { leave() }
 
     Column(Modifier.fillMaxSize()) {
-        TopBar("Page ${index + 1} sur ${doc.pages.size}", { leave() }) {
-            val next = doc.pages.getOrNull(index + 1)
-            Pill(if (next != null) "Suivant" else "Terminer", true, {
-                commit()
-                if (next != null) model.replace(app.feuillet.Screen.Edit(docId, next.id, renderTab)) else model.pop()
-            }, solid = true)
+        TopBar(if (isDraft) "Nouvelle page" else "Page ${index + 1} sur ${doc?.pages?.size ?: 1}", { leave() }) {
+            if (!isDraft) Pill("Terminer", true, { leave() }, solid = true)
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill("Bords et courbure", !renderTab, { renderTab = false }, Modifier.weight(1f))
@@ -138,7 +153,7 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
                 }
             })
         } else {
-            RenderTab(model, page, source, onChange = { page = it }, onApplyAll = {
+            RenderTab(model, page, source, showApplyAll = !isDraft, onChange = { page = it }, onApplyAll = {
                 commit()
                 val cur = page
                 store.doc(docId)?.pages?.forEach { other ->
@@ -150,6 +165,12 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
                     }
                 }
             })
+        }
+        if (isDraft) {
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                BigButton("Reprendre", { discard(); model.replace(app.feuillet.Screen.Capture(docId)) }, Modifier.weight(1f), primary = false, icon = Ic.Scan)
+                BigButton("Ajouter au document", { addToDocument() }, Modifier.weight(1.6f), icon = Ic.Check)
+            }
         }
     }
 }
@@ -305,7 +326,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.EdgesTab(page: Page, 
 
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
-    model: AppModel, page: Page, source: Raster?, onChange: (Page) -> Unit, onApplyAll: () -> Unit,
+    model: AppModel, page: Page, source: Raster?, showApplyAll: Boolean, onChange: (Page) -> Unit, onApplyAll: () -> Unit,
 ) {
     var flat by remember { mutableStateOf<Raster?>(null) }
     var preview by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -389,10 +410,12 @@ private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
                 Slider(value = page.contrast, onValueChange = { onChange(page.copy(contrast = it)) }, valueRange = -1f..1f, modifier = Modifier.weight(1f).height(40.dp))
             }
         }
-        BigButton(
-            if (applied) "Appliqué à toutes les pages" else "Appliquer ce rendu à toutes les pages", { onApplyAll(); applied = true },
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp), primary = false, height = 48.dp,
-        )
+        if (showApplyAll) {
+            BigButton(
+                if (applied) "Appliqué à toutes les pages" else "Appliquer ce rendu à toutes les pages", { onApplyAll(); applied = true },
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp), primary = false, height = 48.dp,
+            )
+        }
         Spacer(Modifier.height(4.dp))
     }
 }
