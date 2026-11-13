@@ -70,7 +70,7 @@ class Engine(private val store: Store) {
      * n'est PAS ajoutée au document : c'est à l'appelant de le faire. Null si l'image est illisible.
      */
     suspend fun preparePage(docId: String, source: File, deleteSource: Boolean): Page? = withContext(Dispatchers.IO) {
-        val bmp = decode(source, 3600) ?: return@withContext null
+        val bmp = decode(source, 4096) ?: return@withContext null
         if (deleteSource) source.delete()
         val prev = store.doc(docId)?.pages?.lastOrNull()
         val base = Page(corners = emptyList(), curves = emptyList(), detected = false, format = prev?.format ?: store.defaultFormat).let { p ->
@@ -120,23 +120,39 @@ class Engine(private val store: Store) {
         scope.launch {
             runCatching {
                 val page = store.doc(docId)?.pages?.firstOrNull { it.id == pageId } ?: return@launch
-                val bmp = decode(store.srcFile(docId, pageId), 3600) ?: return@launch
-                val src = bmp.toRaster(); bmp.recycle()
-                val flat = flatten(src, page, 3000)
-                val out = Enhancer.apply(flat.image, page.enhance())
-                val ob = out.toBitmap()
-                store.outFile(docId, pageId).outputStream().use { ob.compress(Bitmap.CompressFormat.JPEG, 92, it) }
-                val tw = 480; val th = max(1, ob.height * tw / ob.width)
-                val tb = Bitmap.createScaledBitmap(ob, tw, th, true)
-                store.thumbFile(docId, pageId).outputStream().use { tb.compress(Bitmap.CompressFormat.JPEG, 85, it) }
-                tb.recycle(); ob.recycle()
-                store.updatePage(docId, pageId) { cur ->
-                    cur.copy(ready = true, rev = cur.rev + 1, outW = out.w, outH = out.h, widthMm = flat.widthMm, heightMm = flat.heightMm)
+                // Pleine résolution d'abord (un A4 à 300 points par pouce fait 3508 pixels de haut).
+                // Si la mémoire manque, on recommence plus petit plutôt que d'échouer.
+                var done = false
+                for ((srcSide, outSide) in listOf(4096 to 3508, 3200 to 2600, 2400 to 2000)) {
+                    try {
+                        renderAt(docId, pageId, page, srcSide, outSide)
+                        done = true
+                    } catch (e: OutOfMemoryError) {
+                        System.gc()
+                    }
+                    if (done) break
                 }
+                if (!done) store.updatePage(docId, pageId) { cur -> cur.copy(ready = true) }
             }.onFailure {
                 // rendu impossible (mémoire, fichier manquant) : on rend la main pour ne pas bloquer l'export
                 store.updatePage(docId, pageId) { cur -> cur.copy(ready = true) }
             }
+        }
+    }
+
+    private fun renderAt(docId: String, pageId: String, page: Page, srcSide: Int, outSide: Int) {
+        val bmp = decode(store.srcFile(docId, pageId), srcSide) ?: throw IllegalStateException("photo illisible")
+        val src = bmp.toRaster(); bmp.recycle()
+        val flat = flatten(src, page, outSide)
+        val out = Enhancer.apply(flat.image, page.enhance())
+        val ob = out.toBitmap()
+        store.outFile(docId, pageId).outputStream().use { ob.compress(Bitmap.CompressFormat.JPEG, 93, it) }
+        val tw = 480; val th = max(1, ob.height * tw / ob.width)
+        val tb = Bitmap.createScaledBitmap(ob, tw, th, true)
+        store.thumbFile(docId, pageId).outputStream().use { tb.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        tb.recycle(); ob.recycle()
+        store.updatePage(docId, pageId) { cur ->
+            cur.copy(ready = true, rev = cur.rev + 1, outW = out.w, outH = out.h, widthMm = flat.widthMm, heightMm = flat.heightMm)
         }
     }
 

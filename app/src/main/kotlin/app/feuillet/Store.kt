@@ -27,7 +27,7 @@ data class Page(
     val strength: Float = 1f,
     val format: PaperFormat = PaperFormat.AUTO,
     val rotation: Int = 0,
-    val filter: Filter = Filter.AUTO,
+    val filter: Filter = Filter.SCANNER,
     val brightness: Float = 0f,
     val contrast: Float = 0f,
     val deshadow: Boolean = true,

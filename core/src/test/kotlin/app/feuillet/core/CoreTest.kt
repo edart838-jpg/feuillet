@@ -294,6 +294,29 @@ class CoreTest {
     }
 
     @Test
+    fun leRenduScannerDonneUnNoirFrancSurBlancPur() {
+        val w = 400; val h = 300
+        // papier grisâtre avec ombre progressive, texte gris moyen peu contrasté, aplat sombre, trait rouge
+        val img = Raster(w, h, IntArray(w * h) { i ->
+            val x = i % w; val y = i / w
+            val shade = 1.0 - 0.4 * x / w
+            val text = y in 60..66 && x in 30..370 && (x / 4) % 2 == 0
+            val block = x in 250..360 && y in 150..260
+            val red = y in 110..116 && x in 30..200
+            val base = if (red) intArrayOf(200, 40, 40) else if (block) intArrayOf(40, 40, 44) else if (text) intArrayOf(120, 118, 112) else intArrayOf(215, 212, 200)
+            (255 shl 24) or ((base[0] * shade).toInt() shl 16) or ((base[1] * shade).toInt() shl 8) or (base[2] * shade).toInt()
+        })
+        val out = Enhancer.apply(img, EnhanceParams(Filter.SCANNER, ai = false))
+        fun px(x: Int, y: Int) = out.px[y * w + x]
+        fun lum(x: Int, y: Int) = px(x, y).let { (77 * ((it shr 16) and 255) + 150 * ((it shr 8) and 255) + 29 * (it and 255)) shr 8 }
+        assertTrue(lum(20, 20) > 245 && lum(380, 20) > 245, "papier pas blanc : ${lum(20, 20)} / ${lum(380, 20)}")
+        assertTrue(lum(33, 63) < 70 && lum(361, 63) < 90, "texte pas assez noir : ${lum(33, 63)} / ${lum(361, 63)}")
+        assertTrue(lum(305, 205) < 60, "l'aplat sombre doit rester plein : ${lum(305, 205)}")
+        val red = px(100, 113)
+        assertTrue(((red shr 16) and 255) > ((red shr 8) and 255) + 60, "le trait rouge doit rester rouge")
+    }
+
+    @Test
     fun noirEtBlancGardeLesAplatsPleins() {
         val w = 300; val h = 300
         val img = Raster(w, h, IntArray(w * h) { i ->

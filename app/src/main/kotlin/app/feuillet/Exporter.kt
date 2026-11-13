@@ -35,7 +35,7 @@ enum class ExportFormat(val label: String, val ext: String, val mime: String, va
 enum class ExportQuality(val label: String, val jpeg: Int, val maxSide: Int) {
     LIGHT("Légère", 62, 1600),
     BALANCED("Équilibrée", 82, 2400),
-    MAX("Maximale", 95, 3000),
+    MAX("Maximale", 95, 3508),
 }
 
 class ExportRequest(

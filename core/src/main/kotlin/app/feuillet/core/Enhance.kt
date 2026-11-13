@@ -5,6 +5,7 @@ import kotlin.math.min
 import kotlin.math.pow
 
 enum class Filter(val label: String) {
+    SCANNER("Scanner"),
     AUTO("Auto"),
     COLOR("Couleur"),
     GRAY("Gris"),
@@ -37,6 +38,12 @@ object Enhancer {
         when (p.filter) {
             Filter.ORIGINAL -> {}
             Filter.PHOTO -> { autoLevels(out); saturate(out, 1.12f) }
+            Filter.SCANNER -> {
+                // rendu « scanner de bureau » : fond uniformisé et neutre, netteté, puis contraste local
+                flatten(out); neutralizePaper(out)
+                if (p.ai) MicroNet.apply(out, MicroNet.Kind.TEXT) else if (p.sharpen) unsharp(out, 0.7f)
+                localContrast(out)
+            }
             Filter.AUTO -> { if (p.deshadow) { flatten(out); neutralizePaper(out) }; curve(out, 0.06f, 0.96f, 1.08f) }
             Filter.COLOR -> { if (p.deshadow) flatten(out); curve(out, 0.05f, 0.95f, 1.05f); saturate(out, 1.4f) }
             Filter.GRAY -> { if (p.deshadow) flatten(out); curve(out, 0.06f, 0.96f, 1.08f); saturate(out, 0f) }
@@ -46,7 +53,7 @@ object Enhancer {
                 binarize(out)
             }
         }
-        if (p.filter != Filter.ORIGINAL && p.filter != Filter.BW) {
+        if (p.filter != Filter.ORIGINAL && p.filter != Filter.BW && p.filter != Filter.SCANNER) {
             if (p.ai) MicroNet.apply(out, if (p.filter == Filter.PHOTO) MicroNet.Kind.PHOTO else MicroNet.Kind.TEXT)
             else if (p.sharpen) unsharp(out, if (p.filter == Filter.PHOTO) 0.35f else 0.7f)
         }
@@ -210,6 +217,45 @@ object Enhancer {
             val ng = (((p shr 8) and 255) + d).coerceIn(0, 255)
             val nb = ((p and 255) + d).coerceIn(0, 255)
             img.px[i] = (255 shl 24) or (nr shl 16) or (ng shl 8) or nb
+        }
+    }
+
+    /**
+     * Contraste local de type Sauvola, à bords doux : chaque pixel est comparé à un seuil tiré de la moyenne et
+     * de la dispersion de son voisinage. L'encre devient franchement noire, le papier blanc pur, et les
+     * dégradés des contours de lettres sont conservés (pas de crénelage). Les couleurs franches gardent leur teinte.
+     */
+    private fun localContrast(img: Raster) {
+        val w = img.w; val h = img.h
+        val l = lumaBytes(img)
+        val r = max(8, max(w, h) / 90)
+        val mean = boxBlurBytes(l, w, h, r)
+        val dev = ByteArray(w * h)
+        for (i in dev.indices) dev[i] = kotlin.math.abs((l[i].toInt() and 255) - (mean[i].toInt() and 255)).coerceAtMost(255).toByte()
+        val spread = boxBlurBytes(dev, w, h, r)            // écart absolu moyen, proche de l'écart-type / 1,25
+        for (i in img.px.indices) {
+            val v = l[i].toInt() and 255
+            val m = (mean[i].toInt() and 255).toFloat()
+            val sd = (spread[i].toInt() and 255) * 1.25f
+            val threshold = m * (1f + 0.34f * (sd / 128f - 1f))
+            val band = max(14f, 0.9f * sd)
+            val t = ((v - (threshold - band / 2)) / band).coerceIn(0f, 1f)
+            // seuil global en renfort : les grands aplats sombres restent pleins
+            val g = ((v - 70) / 60f).coerceIn(0f, 1f)
+            val k = min(t * t * (3 - 2 * t), g * g * (3 - 2 * g))
+            val target = 255f * k
+            val p = img.px[i]
+            val cr = (p shr 16) and 255; val cg = (p shr 8) and 255; val cb = p and 255
+            val chroma = max(cr, max(cg, cb)) - min(cr, min(cg, cb))
+            if (chroma < 40) {
+                val o = target.toInt()
+                img.px[i] = (255 shl 24) or (o shl 16) or (o shl 8) or o
+            } else {
+                // encre ou aplat coloré : on garde la teinte, on ne fait qu'éclaircir vers le blanc ce qui est du fond
+                val lift = if (k > 0.98f) 1f else 0f
+                val nr = (cr + (255 - cr) * lift).toInt(); val ng = (cg + (255 - cg) * lift).toInt(); val nb = (cb + (255 - cb) * lift).toInt()
+                img.px[i] = (255 shl 24) or (nr shl 16) or (ng shl 8) or nb
+            }
         }
     }
 

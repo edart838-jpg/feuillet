@@ -423,7 +423,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
             SectionLabel("Améliorations · calculées sur l'appareil", Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 8.dp))
             FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Pill("Sans ombres", page.deshadow && tunable && page.filter != Filter.PHOTO, { onChange(page.copy(deshadow = !page.deshadow)) })
-                Pill(if (page.filter == Filter.PHOTO) "Photo nette IA" else "Texte net IA", page.ai && tunable, { onChange(page.copy(ai = !page.ai)) })
+                Pill(if (page.filter == Filter.PHOTO) "Photo nette" else "Netteté fine", page.ai && tunable, { onChange(page.copy(ai = !page.ai)) })
                 Pill("Accentuer", page.sharpen && !page.ai && tunable && page.filter != Filter.BW, { onChange(if (page.ai) page.copy(ai = false, sharpen = true) else page.copy(sharpen = !page.sharpen)) })
             }
             Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
