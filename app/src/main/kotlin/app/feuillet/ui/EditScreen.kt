@@ -8,6 +8,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -137,11 +143,20 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
 
     Column(Modifier.fillMaxSize()) {
         TopBar(if (isDraft) "Nouvelle page" else "Page ${index + 1} sur ${doc?.pages?.size ?: 1}", { leave() }) {
-            if (!isDraft) Pill("Terminer", true, { leave() }, solid = true)
+            if (isDraft) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconBtn(Ic.Scan, "Reprendre la photo", { discard(); model.replace(app.feuillet.Screen.Capture(docId)) }, outlined = true)
+                    Pill("Ajouter", true, { addToDocument() }, solid = true)
+                }
+            } else {
+                Pill("Terminer", true, { leave() }, solid = true)
+            }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Page redressée", renderTab, { renderTab = true }, Modifier.weight(1f))
-            Pill("Recadrage manuel", !renderTab, { renderTab = false }, Modifier.weight(1f))
+        if (!renderTab) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill("Page redressée", false, { renderTab = true }, Modifier.weight(1f))
+                Pill("Recadrage manuel", true, { renderTab = false }, Modifier.weight(1f))
+            }
         }
         if (!renderTab) {
             EdgesTab(page, sourceImage, onChange = { page = it }, onRedetect = {
@@ -153,7 +168,7 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
                 }
             })
         } else {
-            RenderTab(model, page, source, showApplyAll = !isDraft, onChange = { page = it }, onApplyAll = {
+            RenderTab(model, page, source, showApplyAll = !isDraft, onChange = { page = it }, onCrop = { renderTab = false }, onApplyAll = {
                 commit()
                 val cur = page
                 store.doc(docId)?.pages?.forEach { other ->
@@ -165,12 +180,6 @@ fun EditScreen(model: AppModel, docId: String, pageId: String, startOnRender: Bo
                     }
                 }
             })
-        }
-        if (isDraft) {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                BigButton("Reprendre", { discard(); model.replace(app.feuillet.Screen.Capture(docId)) }, Modifier.weight(1f), primary = false, icon = Ic.Scan)
-                BigButton("Ajouter au document", { addToDocument() }, Modifier.weight(1.6f), icon = Ic.Check)
-            }
         }
     }
 }
@@ -313,7 +322,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.EdgesTab(page: Page, 
 
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
-    model: AppModel, page: Page, source: Raster?, showApplyAll: Boolean, onChange: (Page) -> Unit, onApplyAll: () -> Unit,
+    model: AppModel, page: Page, source: Raster?, showApplyAll: Boolean, onChange: (Page) -> Unit, onCrop: () -> Unit, onApplyAll: () -> Unit,
 ) {
     var flat by remember { mutableStateOf<Raster?>(null) }
     var preview by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -321,6 +330,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
     var thumbs by remember { mutableStateOf(mapOf<Filter, ImageBitmap>()) }
     var showOriginal by remember { mutableStateOf(false) }
     var applied by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
 
     // 1. géométrie : recalculée seulement quand les bords, la courbure, le format ou la rotation changent
     LaunchedEffect(source, page.corners, page.curves, page.useCurves, page.strength, page.format, page.rotation) {
@@ -344,73 +354,96 @@ private fun androidx.compose.foundation.layout.ColumnScope.RenderTab(
         }
     }
 
+    // l'image prend toute la place ; les réglages sont dans un tiroir à tirer vers le haut
     Box(
-        Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp).background(C.Deep).pointerInput(Unit) {
+        Modifier.fillMaxWidth().weight(1f).background(C.Deep).pointerInput(Unit) {
             detectTapGestures(onPress = { showOriginal = true; tryAwaitRelease(); showOriginal = false })
         },
         contentAlignment = Alignment.Center,
     ) {
         val shown = if (showOriginal) original else preview
         if (shown == null) CircularProgressIndicator(color = C.Accent)
-        else Image(shown, contentDescription = if (showOriginal) "Page avant amélioration" else "Aperçu de la page", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(12.dp))
-        Text(
-            if (showOriginal) "Avant amélioration" else "Maintenir : voir l'original", color = C.Text, fontSize = 12.sp,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xE60E1014)).padding(horizontal = 12.dp, vertical = 8.dp),
+        else Image(shown, contentDescription = if (showOriginal) "Page avant amélioration" else "Aperçu de la page", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(6.dp))
+        if (showOriginal) Text(
+            "Avant amélioration", color = C.Text, fontSize = 12.sp,
+            modifier = Modifier.align(Alignment.TopCenter).padding(10.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xE60E1014)).padding(horizontal = 12.dp, vertical = 8.dp),
         )
     }
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-        Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // courbure interne du document : appliquée ou non, visible aussitôt sur l'aperçu
-            BigButton(
-                if (page.useCurves) "Courbure corrigée" else "Corriger la courbure", { onChange(page.copy(useCurves = !page.useCurves)) },
-                Modifier.weight(1f), primary = page.useCurves, icon = Ic.Curve, height = 52.dp,
+    val sheet = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    Column(Modifier.fillMaxWidth().clip(sheet).background(C.Surface).animateContentSize()) {
+        val drag = remember { floatArrayOf(0f) }
+        Column(
+            Modifier.fillMaxWidth().pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragStart = { drag[0] = 0f },
+                    onDragEnd = { if (drag[0] < -24f) expanded = true else if (drag[0] > 24f) expanded = false },
+                    onVerticalDrag = { change, dy -> drag[0] += dy; change.consume() },
+                )
+            }.padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                Modifier.size(120.dp, 40.dp).clickable(onClickLabel = if (expanded) "Replier les réglages" else "Ouvrir les réglages") { expanded = !expanded }
+                    .semantics { contentDescription = "Réglages de la page" },
+                contentAlignment = Alignment.Center,
+            ) { Box(Modifier.size(44.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF5A6070))) }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // courbure interne du document : appliquée ou non, visible aussitôt sur l'aperçu
+                BigButton(
+                    if (page.useCurves) "Courbure corrigée" else "Corriger la courbure", { onChange(page.copy(useCurves = !page.useCurves)) },
+                    Modifier.weight(1f), primary = page.useCurves, icon = Ic.Curve, height = 52.dp,
+                )
+                IconBtn(Ic.Rotate, "Pivoter de 90 degrés", { onChange(page.copy(rotation = (page.rotation + 1) % 4)) }, size = 52.dp, radius = 16.dp, outlined = true, background = C.Ink)
+            }
+            Text(
+                if (expanded) "Glisser vers le bas pour agrandir l'image" else "Glisser vers le haut : filtres, netteté, luminosité · maintenir l'image : voir l'original",
+                color = C.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
-            IconBtn(Ic.Rotate, "Pivoter de 90 degrés", { onChange(page.copy(rotation = (page.rotation + 1) % 4)) }, size = 52.dp, radius = 16.dp, outlined = true)
         }
-        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(Filter.values().toList()) { f ->
-                val sel = page.filter == f
-                Column(
-                    Modifier.clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { onChange(page.copy(filter = f)) },
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        Modifier.size(62.dp, 78.dp).clip(RoundedCornerShape(10.dp)).background(C.Surface)
-                            .border(if (sel) 2.dp else 1.dp, if (sel) C.Accent else C.Line, RoundedCornerShape(10.dp)),
+        if (expanded) Column(Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+            LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(Filter.values().toList()) { f ->
+                    val sel = page.filter == f
+                    Column(
+                        Modifier.clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { onChange(page.copy(filter = f)) },
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        thumbs[f]?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                        Box(
+                            Modifier.size(62.dp, 78.dp).clip(RoundedCornerShape(10.dp)).background(C.Ink)
+                                .border(if (sel) 2.dp else 1.dp, if (sel) C.Accent else C.Line, RoundedCornerShape(10.dp)),
+                        ) {
+                            thumbs[f]?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                        }
+                        Text(f.label, color = if (sel) C.Accent else C.Text, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium)
                     }
-                    Text(f.label, color = if (sel) C.Accent else C.Text, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium)
                 }
             }
-        }
-        val tunable = page.filter != Filter.ORIGINAL
-        SectionLabel("Améliorations · calculées sur l'appareil", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
-        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Sans ombres", page.deshadow && tunable && page.filter != Filter.PHOTO, { onChange(page.copy(deshadow = !page.deshadow)) }, Modifier.weight(1f))
-            Pill(
-                if (page.filter == Filter.PHOTO) "Photo nette IA" else "Texte net IA", page.ai && tunable,
-                { onChange(page.copy(ai = !page.ai)) }, Modifier.weight(1f),
-            )
-            Pill("Accentuer", page.sharpen && !page.ai && tunable && page.filter != Filter.BW, { onChange(if (page.ai) page.copy(ai = false, sharpen = true) else page.copy(sharpen = !page.sharpen)) }, Modifier.weight(1f))
-        }
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Luminosité", color = C.Muted, fontSize = 13.sp, modifier = Modifier.width(84.dp))
-                Slider(value = page.brightness, onValueChange = { onChange(page.copy(brightness = it)) }, valueRange = -1f..1f, modifier = Modifier.weight(1f).height(40.dp))
+            val tunable = page.filter != Filter.ORIGINAL
+            SectionLabel("Améliorations · calculées sur l'appareil", Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 8.dp))
+            FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill("Sans ombres", page.deshadow && tunable && page.filter != Filter.PHOTO, { onChange(page.copy(deshadow = !page.deshadow)) })
+                Pill(if (page.filter == Filter.PHOTO) "Photo nette IA" else "Texte net IA", page.ai && tunable, { onChange(page.copy(ai = !page.ai)) })
+                Pill("Accentuer", page.sharpen && !page.ai && tunable && page.filter != Filter.BW, { onChange(if (page.ai) page.copy(ai = false, sharpen = true) else page.copy(sharpen = !page.sharpen)) })
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Contraste", color = C.Muted, fontSize = 13.sp, modifier = Modifier.width(84.dp))
-                Slider(value = page.contrast, onValueChange = { onChange(page.copy(contrast = it)) }, valueRange = -1f..1f, modifier = Modifier.weight(1f).height(40.dp))
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Luminosité", color = C.Muted, fontSize = 13.sp, modifier = Modifier.width(84.dp))
+                    Slider(value = page.brightness, onValueChange = { onChange(page.copy(brightness = it)) }, valueRange = -1f..1f, modifier = Modifier.weight(1f).height(40.dp))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Contraste", color = C.Muted, fontSize = 13.sp, modifier = Modifier.width(84.dp))
+                    Slider(value = page.contrast, onValueChange = { onChange(page.copy(contrast = it)) }, valueRange = -1f..1f, modifier = Modifier.weight(1f).height(40.dp))
+                }
+            }
+            BigButton("Recadrage manuel", onCrop, Modifier.fillMaxWidth().padding(horizontal = 20.dp), primary = false, icon = Ic.Detect, height = 48.dp)
+            if (showApplyAll) {
+                Spacer(Modifier.height(8.dp))
+                BigButton(
+                    if (applied) "Appliqué à toutes les pages" else "Appliquer ce rendu à toutes les pages", { onApplyAll(); applied = true },
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp), primary = false, height = 48.dp,
+                )
             }
         }
-        if (showApplyAll) {
-            BigButton(
-                if (applied) "Appliqué à toutes les pages" else "Appliquer ce rendu à toutes les pages", { onApplyAll(); applied = true },
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp), primary = false, height = 48.dp,
-            )
-        }
-        Spacer(Modifier.height(4.dp))
     }
 }

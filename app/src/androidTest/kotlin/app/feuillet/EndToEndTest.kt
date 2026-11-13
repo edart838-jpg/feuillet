@@ -128,11 +128,15 @@ class EndToEndTest {
             compose.waitUntilAtLeastOneExists(hasText("Corriger la courbure"), 5_000)
             compose.onNodeWithText("Corriger la courbure").performClick()
             compose.onNodeWithContentDescription("Pivoter de 90 degrés").performClick()
-            // le recadrage manuel reste accessible
+            // les autres réglages sont dans le tiroir ; le recadrage manuel y reste accessible
+            compose.onNodeWithContentDescription("Réglages de la page").performClick()
+            compose.waitUntilAtLeastOneExists(hasText("Recadrage manuel"), 5_000)
             compose.onNodeWithText("Recadrage manuel").performClick()
             compose.waitUntilAtLeastOneExists(hasContentDescription("Photo d'origine"), 20_000)
             compose.onNodeWithText("Page redressée").performClick()
             compose.waitUntilAtLeastOneExists(hasContentDescription("Aperçu de la page"), 60_000)
+            compose.onNodeWithContentDescription("Réglages de la page").performClick()
+            compose.waitUntilAtLeastOneExists(hasText("Gris"), 5_000)
             compose.onNodeWithText("Gris").performClick()
             compose.onNodeWithText("Terminer").performClick()
 
@@ -156,7 +160,7 @@ class EndToEndTest {
             scenario.onActivity { assertEquals(before, it.model.store.docs.first().pages.size) }
             // le rendu de la dernière page du document (noir et blanc) est repris par défaut
             assertEquals(Filter.BW, fresh!!.filter)
-            compose.onNodeWithText("Ajouter au document").performClick()
+            compose.onNodeWithText("Ajouter").performClick()
             compose.waitUntilAtLeastOneExists(hasText("Page suivante"), 10_000)
             scenario.onActivity { assertEquals(before + 1, it.model.store.docs.first().pages.size) }
             compose.waitUntilAtLeastOneExists(hasContentDescription("Page ${before + 1}"), 10_000)
