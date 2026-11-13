@@ -186,7 +186,11 @@ class CoreTest {
         // ondulation des lignes de texte : forte sans correction, quasi nulle avec
         val wavyBefore = Dewarper.estimateDisplacement(flat.luma()).second
         assertTrue(wavyBefore > 3.0, "la photo de test doit être nettement ondulée ($wavyBefore px)")
-        assertTrue(curved.residualPx < 0.6, "ondulation résiduelle trop forte : ${curved.residualPx} px")
+        // plancher de la mesure : la page d'origine, parfaitement droite, à la même résolution
+        val floor = Dewarper.estimateDisplacement(reference.luma()).second
+        println("ondulation : avant $wavyBefore px, après ${curved.residualPx} px, plancher de mesure $floor px")
+        assertTrue(curved.residualPx < floor + 0.6, "ondulation résiduelle ${curved.residualPx} px pour un plancher de $floor px")
+        assertTrue(curved.residualPx < wavyBefore / 3, "la correction doit diviser l'ondulation par trois au moins")
         assertTrue(curved.displacements.isNotEmpty(), "l'affinage par lignes de texte doit s'activer")
 
         // fidélité à la page d'origine : la version corrigée doit en être bien plus proche
@@ -218,6 +222,36 @@ class CoreTest {
         val res = Dewarper.dewarp(warped, map, w, h, refine = true)
         assertTrue(before > 1.0, "la bosse doit se voir avant correction ($before px)")
         assertTrue(res.residualPx < 0.6, "ondulation restante ${res.residualPx} px (avant : $before px)")
+    }
+
+    @Test
+    fun lesJambagesNeFontPasOndulerUnMot() {
+        // lignes parfaitement droites dont un mot porte une grappe de jambages (comme « packaging »)
+        val w = 900; val h = 600
+        val img = Raster(w, h, IntArray(w * h) { i ->
+            val x = i % w; val y = i / w
+            val row = y % 40
+            val letter = x in 60..840 && (x % 7) < 5 && (x / 7) % 6 != 5
+            val body = row in 14..21 && letter
+            val descender = row in 22..27 && letter && x in 400..470 && (x / 7) % 3 != 1
+            if ((body || descender) && y in 40..560) 0xFF202020.toInt() else 0xFFF5F5F5.toInt()
+        })
+        val (field, wav) = Dewarper.estimateDisplacement(img.luma())
+        assertTrue(wav < 0.35, "des lignes droites ne doivent pas être vues comme ondulées : $wav px")
+        if (field != null) {
+            var worst = 0.0
+            for (yy in 1..9) for (xx in 1..19) worst = maxOf(worst, abs(field.at(xx / 20.0, yy / 10.0)) * h)
+            assertTrue(worst < 0.6, "la correction déformerait le mot de $worst px")
+        }
+    }
+
+    @Test
+    fun leFiltreAutoRetireLesTeintesPalesMaisGardeLesCouleurs() {
+        val img = Raster(4, 1, intArrayOf(0xFFF6F2D8.toInt(), 0xFFC83228.toInt(), 0xFF2846B4.toInt(), 0xFFFFFFFF.toInt()))
+        val out = Enhancer.apply(img, EnhanceParams(Filter.AUTO, deshadow = true, sharpen = false))
+        fun chroma(p: Int): Int { val r = (p shr 16) and 255; val g = (p shr 8) and 255; val b = p and 255; return maxOf(r, g, b) - minOf(r, g, b) }
+        assertTrue(chroma(out.px[0]) < 8, "le papier jauni doit devenir neutre : ${chroma(out.px[0])}")
+        assertTrue(chroma(out.px[1]) > 100 && chroma(out.px[2]) > 100, "le rouge et le bleu francs doivent rester")
     }
 
     @Test

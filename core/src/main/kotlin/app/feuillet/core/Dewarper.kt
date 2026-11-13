@@ -254,6 +254,7 @@ object Dewarper {
         val mean = gray.boxBlur(max(4, w / 80))
         val ink = ByteArray(w * h)
         for (i in ink.indices) if (gray.d[i] < mean.d[i] * 0.86f - 4f) ink[i] = 1
+        val rawInk = ink.copyOf()                       // encre avant fermeture : sert à repérer la ligne de base
         // fermeture horizontale : relie les lettres d'une même ligne
         val gap = max(6, w * 40 / 1240)
         for (y in 0 until h) {
@@ -270,7 +271,7 @@ object Dewarper {
         val stack = IntArray(w * h)
         val sx = ArrayList<Double>(); val sy = ArrayList<Double>(); val sd = ArrayList<Double>()
         var lines = 0; var sumAbs = 0.0; var count = 0
-        val colSum = DoubleArray(w); val colCnt = IntArray(w)
+        val colCnt = IntArray(w)
         for (start in 0 until w * h) {
             if (ink[start].toInt() == 0 || seen[start].toInt() != 0) continue
             var sp = 0; var n = 0
@@ -289,20 +290,36 @@ object Dewarper {
             }
             val bw = x1 - x0 + 1; val bh = y1 - y0 + 1
             if (bw < minW || bh > maxH || bh < 2 || n >= 200000) continue
-            for (x in x0..x1) { colSum[x] = 0.0; colCnt[x] = 0 }
-            for (p in pix) { val x = p % w; colSum[x] += (p / w).toDouble(); colCnt[x]++ }
-            // centre de ligne par colonne, lissé par moyenne glissante : gomme hampes et jambages mais garde
-            // les ondulations locales (pli, bosse)
+            // Ligne de base : bas de l'encre de chaque colonne, puis médiane glissante. Les jambages (p, g, q…)
+            // sont minoritaires dans la fenêtre : ils ne font plus onduler un mot comme « packaging ».
             val xsCol = ArrayList<Int>(); val raw = ArrayList<Double>()
-            for (x in x0..x1) if (colCnt[x] > 0) { xsCol.add(x); raw.add(colSum[x] / colCnt[x]) }
-            if (xsCol.size < minW * 0.7) continue
-            val half = max(6, w / 60)
-            val smooth = DoubleArray(raw.size)
-            var acc = 0.0; var lo = 0; var hi = -1
+            // seuls les pixels de cette ligne comptent (les lignes voisines, courbes, peuvent chevaucher sa boîte)
+            for (x in x0..x1) colCnt[x] = -1
+            for (p in pix) if (rawInk[p].toInt() != 0) { val x = p % w; val y = p / w; if (y > colCnt[x]) colCnt[x] = y }
+            for (x in x0..x1) if (colCnt[x] >= 0) { xsCol.add(x); raw.add(colCnt[x].toDouble()) }
+            if (xsCol.size < minW * 0.5) continue
+            val half = max(12, w / 22)
+            val medianed = DoubleArray(raw.size)
+            var lo = 0; var hi = -1
+            val window = ArrayList<Double>()
             for (i in raw.indices) {
-                while (hi < raw.size - 1 && xsCol[hi + 1] - xsCol[i] <= half) { hi++; acc += raw[hi] }
-                while (xsCol[i] - xsCol[lo] > half) { acc -= raw[lo]; lo++ }
-                smooth[i] = acc / (hi - lo + 1)
+                while (hi < raw.size - 1 && xsCol[hi + 1] - xsCol[i] <= half) hi++
+                while (xsCol[i] - xsCol[lo] > half) lo++
+                window.clear()
+                for (k in lo..hi) window.add(raw[k])
+                window.sort()
+                medianed[i] = window[window.size / 2]
+            }
+            // léger lissage de la médiane (elle avance par paliers d'un pixel)
+            val smooth = DoubleArray(raw.size)
+            val sh = max(4, half / 3)
+            for (i in raw.indices) {
+                var acc = 0.0; var c = 0
+                var k = i
+                while (k >= 0 && xsCol[i] - xsCol[k] <= sh) { acc += medianed[k]; c++; k-- }
+                k = i + 1
+                while (k < raw.size && xsCol[k] - xsCol[i] <= sh) { acc += medianed[k]; c++; k++ }
+                smooth[i] = acc / c
             }
             val med = smooth.sortedArray()[smooth.size / 2]
             lines++
@@ -330,7 +347,7 @@ object Dewarper {
                 for (q in 0 until 4) ata[idx[p]][idx[q]] += wt[p] * wt[q]
             }
         }
-        val lambda = 0.6 * count / n
+        val lambda = 1.2 * count / n
         fun smoothTerm(a: Int, b: Int, c: Int) {
             val ids = intArrayOf(a, b, c); val cf = doubleArrayOf(1.0, -2.0, 1.0)
             for (p in 0 until 3) for (q in 0 until 3) ata[ids[p]][ids[q]] += lambda * cf[p] * cf[q]

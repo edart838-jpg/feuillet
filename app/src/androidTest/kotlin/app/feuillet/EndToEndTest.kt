@@ -178,7 +178,7 @@ class EndToEndTest {
             compose.waitUntilAtLeastOneExists(hasText("Nouveau scan"), 10_000)
             scenario.onActivity { it.model.store.autoCapture = false }      // la scène virtuelle ne doit pas déclencher de prise
             compose.onNodeWithText("Nouveau scan").performClick()
-            compose.waitUntilAtLeastOneExists(hasText("Capture auto"), 15_000)
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Importer depuis la galerie"), 15_000)
             Thread.sleep(4000)
             compose.onNodeWithContentDescription("Importer depuis la galerie").assertIsDisplayed()
             compose.onNodeWithContentDescription("Fermer").performClick()

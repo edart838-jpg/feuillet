@@ -112,13 +112,13 @@ fun CaptureScreen(model: AppModel, docId: String) {
 
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
-    var auto by remember { mutableStateOf(store.autoCapture) }
     var torch by remember { mutableStateOf(false) }
     var outline by remember { mutableStateOf<Outline?>(null) }
     var aspect by remember { mutableStateOf(0.75f) }
     var stable by remember { mutableIntStateOf(0) }
     var busy by remember { mutableIntStateOf(0) }
     var message by remember { mutableStateOf<String?>(null) }
+    var focusAt by remember { mutableStateOf<Offset?>(null) }
 
     val capture = remember {
         ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY).setTargetAspectRatio(AspectRatio.RATIO_4_3).build()
@@ -180,8 +180,6 @@ fun CaptureScreen(model: AppModel, docId: String) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconBtn(Ic.Close, "Fermer", { finish() }, background = Color(0xFF1C1F26))
             Spacer(Modifier.weight(1f))
-            Pill("Capture auto", auto, { auto = !auto; store.autoCapture = auto }, solid = true)
-            Spacer(Modifier.width(8.dp))
             IconBtn(Ic.Image, "Importer depuis la galerie", { pickImages.launch("image/*") }, background = Color(0xFF1C1F26))
             Spacer(Modifier.width(8.dp))
             IconBtn(Ic.Flash, if (torch) "Éteindre la lampe" else "Allumer la lampe", {
@@ -197,6 +195,16 @@ fun CaptureScreen(model: AppModel, docId: String) {
                         val view = PreviewView(ctx).apply {
                             scaleType = PreviewView.ScaleType.FIT_CENTER
                             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                        }
+                        // toucher l'aperçu : mise au point et exposition sur ce point
+                        view.setOnTouchListener { v, e ->
+                            if (e.action == android.view.MotionEvent.ACTION_UP) {
+                                val point = view.meteringPointFactory.createPoint(e.x, e.y)
+                                runCatching { camera?.cameraControl?.startFocusAndMetering(androidx.camera.core.FocusMeteringAction.Builder(point).build()) }
+                                focusAt = Offset(e.x, e.y)
+                                v.performClick()
+                            }
+                            true
                         }
                         val future = ProcessCameraProvider.getInstance(ctx)
                         future.addListener({
@@ -231,6 +239,7 @@ fun CaptureScreen(model: AppModel, docId: String) {
                 )
                 val o = outline
                 Canvas(Modifier.fillMaxSize()) {
+                    focusAt?.let { drawCircle(C.Text, 28.dp.toPx(), it, style = Stroke(2.dp.toPx())) }
                     if (o == null) return@Canvas
                     // l'aperçu est centré sans rognage : on retrouve le rectangle réellement occupé par l'image
                     val vw = size.width; val vh = size.height
@@ -254,8 +263,7 @@ fun CaptureScreen(model: AppModel, docId: String) {
                 val status = when {
                     busy > 0 -> "Recadrage de la page…"
                     outline == null -> "Cherche la page…"
-                    auto && stable >= 2 -> "Page détectée · ne bougez plus"
-                    else -> "Page détectée"
+                    else -> "Page détectée · touchez l'image pour la mise au point"
                 }
                 Row(
                     Modifier.align(Alignment.TopCenter).padding(top = 16.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xD90E1014)).padding(horizontal = 14.dp, vertical = 9.dp),
@@ -270,10 +278,6 @@ fun CaptureScreen(model: AppModel, docId: String) {
                         it, color = C.Text, fontSize = 12.sp,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xD90E1014)).padding(horizontal = 10.dp, vertical = 6.dp),
                     )
-                }
-                // déclenchement automatique : contour sûr et immobile pendant 5 images d'analyse
-                if (auto && stable >= 5 && auto2.armed && !auto2.shooting) {
-                    androidx.compose.runtime.SideEffect { shoot() }
                 }
             } else {
                 Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {

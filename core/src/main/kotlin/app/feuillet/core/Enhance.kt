@@ -37,7 +37,7 @@ object Enhancer {
         when (p.filter) {
             Filter.ORIGINAL -> {}
             Filter.PHOTO -> { autoLevels(out); saturate(out, 1.12f) }
-            Filter.AUTO -> { if (p.deshadow) flatten(out); curve(out, 0.06f, 0.96f, 1.08f) }
+            Filter.AUTO -> { if (p.deshadow) { flatten(out); neutralizePaper(out) }; curve(out, 0.06f, 0.96f, 1.08f) }
             Filter.COLOR -> { if (p.deshadow) flatten(out); curve(out, 0.05f, 0.95f, 1.05f); saturate(out, 1.4f) }
             Filter.GRAY -> { if (p.deshadow) flatten(out); curve(out, 0.06f, 0.96f, 1.08f); saturate(out, 0f) }
             Filter.BW -> {
@@ -98,6 +98,25 @@ object Enhancer {
                 val b = min(255f, (p and 255) * gains[2]).toInt()
                 img.px[y * w + x] = (255 shl 24) or (r shl 16) or (g shl 8) or b
             }
+        }
+    }
+
+    /**
+     * Retire les teintes pâles (papier jauni, reflets colorés) sans toucher aux couleurs franches :
+     * un pixel à peine coloré devient gris, un pixel nettement coloré est conservé.
+     */
+    private fun neutralizePaper(img: Raster) {
+        for (i in img.px.indices) {
+            val p = img.px[i]
+            val r = (p shr 16) and 255; val g = (p shr 8) and 255; val b = p and 255
+            val chroma = max(r, max(g, b)) - min(r, min(g, b))
+            if (chroma == 0 || chroma >= 60) continue
+            val k = ((chroma - 24) / 36f).coerceIn(0f, 1f)
+            val y = (77 * r + 150 * g + 29 * b) / 256f
+            val nr = (y + (r - y) * k).toInt().coerceIn(0, 255)
+            val ng = (y + (g - y) * k).toInt().coerceIn(0, 255)
+            val nb = (y + (b - y) * k).toInt().coerceIn(0, 255)
+            img.px[i] = (255 shl 24) or (nr shl 16) or (ng shl 8) or nb
         }
     }
 
