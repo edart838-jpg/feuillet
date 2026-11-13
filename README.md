@@ -6,9 +6,10 @@ sur l'appareil, sans connexion.
 
 ## Installer
 
-1. Sur le téléphone, ouvrez la page [Releases](../../releases) du dépôt.
-2. Téléchargez le fichier `Feuillet-x.y.z.apk` de la version la plus récente.
-3. Ouvrez-le et autorisez l'installation depuis cette source. Android 8 ou plus récent.
+1. Sur le téléphone, touchez ce lien : **[Télécharger Feuillet.apk](https://github.com/edart838-jpg/feuillet/releases/latest/download/Feuillet.apk)** (toujours la dernière version).
+2. Ouvrez le fichier téléchargé et autorisez l'installation depuis cette source. Android 8 ou plus récent.
+
+Toutes les versions : <https://github.com/edart838-jpg/feuillet/releases>
 
 Chaque version s'installe par-dessus la précédente sans perdre les scans.
 

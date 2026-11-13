@@ -42,6 +42,8 @@ jobs:
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/Feuillet-0.1.${GITHUB_RUN_NUMBER}.apk"
+          # nom fixe : sert au lien permanent releases/latest/download/Feuillet.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/Feuillet.apk
           ls -la dist
 
       - uses: actions/upload-artifact@v4
@@ -56,7 +58,8 @@ jobs:
           tag_name: v0.1.${{ github.run_number }}
           name: Feuillet 0.1.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          prerelease: ${{ github.ref != 'refs/heads/main' }}
+          prerelease: false
+          make_latest: true
           body: |
             APK installable directement sur Android 8 ou plus récent.
             Téléchargez le fichier `.apk` ci-dessous depuis le téléphone, ouvrez-le et autorisez l'installation.
