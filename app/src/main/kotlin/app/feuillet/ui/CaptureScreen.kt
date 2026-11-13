@@ -208,9 +208,9 @@ fun CaptureScreen(model: AppModel, docId: String) {
                             analysis.setAnalyzer(executor) { image ->
                                 try {
                                     val plane = lumaPlane(image)
-                                    val found = Detector.detectPlane(plane)?.takeIf { it.confidence > 0.6f }
+                                    val found = Detector.detectPlane(plane)
                                     val prev = auto2.last
-                                    auto2.count = if (found != null && prev != null && cornerShift(found, prev) < 0.02f) auto2.count + 1 else 0
+                                    auto2.count = if (found != null && found.confidence >= 0.8f && prev != null && cornerShift(found, prev) < 0.02f) auto2.count + 1 else 0
                                     auto2.last = found
                                     // réarme le déclenchement quand la page change (ou disparaît) après une prise
                                     val shot = auto2.lastShot
@@ -254,7 +254,7 @@ fun CaptureScreen(model: AppModel, docId: String) {
                 val status = when {
                     busy > 0 && outline == null -> "Enregistrement…"
                     outline == null -> "Cherche la page…"
-                    auto && stable >= 3 -> "Page détectée · ne bougez plus"
+                    auto && stable >= 2 -> "Page détectée · ne bougez plus"
                     else -> "Page détectée"
                 }
                 Row(
@@ -271,8 +271,8 @@ fun CaptureScreen(model: AppModel, docId: String) {
                         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xD90E1014)).padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
-                // déclenchement automatique : page stable pendant ~8 images d'analyse
-                if (auto && stable >= 8 && auto2.armed && !auto2.shooting) {
+                // déclenchement automatique : contour sûr et immobile pendant 5 images d'analyse
+                if (auto && stable >= 5 && auto2.armed && !auto2.shooting) {
                     androidx.compose.runtime.SideEffect { shoot() }
                 }
             } else {

@@ -62,6 +62,60 @@ class CoreTest {
         assertNull(Detector.detect(flat))
     }
 
+    /** Bruit pseudo-aléatoire reproductible. */
+    private fun noisy(w: Int, h: Int, seed: Long, level: (Int, Int) -> Double): Raster {
+        val rnd = java.util.Random(seed)
+        return Raster(w, h, IntArray(w * h) { i ->
+            val v = (level(i % w, i / w) + rnd.nextGaussian() * 5).toInt().coerceIn(0, 255)
+            (255 shl 24) or (v shl 16) or ((v * 0.9).toInt() shl 8) or (v * 0.75).toInt()
+        })
+    }
+
+    @Test
+    fun aucunePageFantomeDansLaPenombre() {
+        // scène sombre avec une lueur diffuse dans un coin : le cas qui produisait un faux contour
+        val img = noisy(600, 800, 1) { x, y ->
+            val dx = (x - 560) / 300.0; val dy = (y - 620) / 380.0
+            10 + 40 * kotlin.math.exp(-(dx * dx + dy * dy))
+        }
+        assertNull(Detector.detect(img))
+        assertNull(Detector.detectPlane(img.downscale(240).luma()))
+    }
+
+    @Test
+    fun aucunePageFantomeSurUneTexture() {
+        // rayures irrégulières (veinage de bois) et damier (carrelage)
+        val wood = noisy(600, 800, 2) { x, y -> 120 + 35 * kotlin.math.sin(y / 7.0 + kotlin.math.sin(x / 90.0) * 2) }
+        assertNull(Detector.detect(wood))
+        val tiles = noisy(600, 800, 3) { x, y -> if (x % 150 < 4 || y % 150 < 4) 60.0 else 170.0 }
+        assertNull(Detector.detect(tiles))
+    }
+
+    @Test
+    fun detecteUnePageClaireSurBoisClairMalgreSonOmbre() {
+        val w = 600; val h = 800
+        val img = noisy(w, h, 4) { x, y ->
+            val wood = 150 + 18 * kotlin.math.sin(y / 9.0)
+            val inPage = x in 140..460 && y in 180..630
+            val inShadow = x in 150..480 && y in 195..655
+            if (inPage) (if (y in 260..268 && x in 180..420) 60.0 else 232.0) else if (inShadow) wood * 0.6 else wood
+        }
+        val o = assertNotNull(Detector.detect(img))
+        val truth = doubleArrayOf(140.0, 180.0, 461.0, 180.0, 461.0, 631.0, 140.0, 631.0)
+        for (k in 0 until 4) {
+            val d = hypot(o.corners[2 * k] * w - truth[2 * k], o.corners[2 * k + 1] * h - truth[2 * k + 1])
+            assertTrue(d < 8.0, "coin $k à $d px : le contour doit suivre le papier, pas son ombre")
+        }
+    }
+
+    @Test
+    fun enDirectLaPageDoitTenirDansLeCadre() {
+        val w = 240; val h = 320
+        fun scene(x0: Int) = Plane(w, h, FloatArray(w * h) { i -> if ((i % w) in x0..(x0 + 150) && (i / w) in 60..260) 225f else 45f })
+        assertNotNull(Detector.detectPlane(scene(40)))
+        assertNull(Detector.detectPlane(scene(120)), "page coupée par le bord droit : pas de contour en direct")
+    }
+
     @Test
     fun detecteUnRectangleInclineSansCourbure() {
         val w = 800; val h = 600

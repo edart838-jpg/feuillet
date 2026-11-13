@@ -26,8 +26,11 @@ Chaque version s'installe par-dessus la précédente sans perdre les scans.
 
 ## Comment la courbure est corrigée
 
-1. **Détection** : seuillage de la luminance et de la « blancheur », plus grande région claire, enveloppe convexe,
-   quadrilatère d'aire maximale, puis coins affinés par intersection des bords voisins.
+1. **Détection** : des quadrilatères candidats sont tirés des droites dominantes de l'image (transformée de
+   Hough) et des grandes régions claires ou sombres. Chaque côté est recalé sur le vrai bord par programmation
+   dynamique, puis le candidat n'est gardé que si ses côtés suivent un bord réel et séparent deux zones
+   d'aspect différent. Un contour posé sur un bandeau, un pli ou une photo imprimée est élargi jusqu'au bord
+   extérieur. Sans page à l'image, aucun contour n'est proposé.
 2. **Perspective** : homographie exacte des quatre coins ; le rapport largeur/hauteur réel de la feuille est
    retrouvé à partir de la perspective (méthode de Zhang et He).
 3. **Bords courbes** : chaque bord est décrit par un polynôme ajusté sur le contour ; l'intérieur de la page est
@@ -37,6 +40,20 @@ Chaque version s'installe par-dessus la précédente sans perdre les scans.
 
 Sur la photo de test (page bombée simulée), l'ondulation moyenne des lignes passe de plus de 3 pixels à moins
 de 0,6 pixel ; ce seuil est vérifié par les tests.
+
+### Mesure de la détection
+
+`tools/bench/` génère 330 scènes simulées (240 avec une page sur douze types de fond, 90 sans page) et mesure
+le détecteur. Une page compte comme bien détectée si ses quatre coins sont à moins de 2,5 % de la diagonale.
+
+| | Première version | Version actuelle |
+| --- | --- | --- |
+| Pages bien détectées | 29 % | 67 % |
+| Faux contour sur une scène sans page | 92 % | 0 % |
+
+Les fonds unis ou peu texturés (gris, noir, tissu, bois sombre) dépassent 80 % ; les fonds très chargés
+(portrait, moto, briques) restent autour de 40 %. Ces scènes sont simulées : elles ne remplacent pas des
+essais avec un vrai téléphone.
 
 ## Micro-réseaux de neurones
 
@@ -72,8 +89,8 @@ sur GitHub Actions.
 
 ## Limites connues
 
-- La détection automatique suppose une page plus claire que son support. Sur un fond clair ou très chargé,
-  les coins sont à placer à la main.
+- La détection automatique est la plus sûre sur un support uni et plus sombre que la page. Sur un fond clair
+  ou très chargé, ou si un bandeau sombre touche le bord de la page, les coins peuvent être à ajuster à la main.
 - La correction de courbure vise les pages bombées ou cintrées (livre ouvert, feuille roulée). Les pages
   froissées ou pliées en plusieurs sens ne sont redressées qu'en partie.
 - L'application a été vérifiée par ses tests et sur émulateur, pas encore sur un téléphone physique : la

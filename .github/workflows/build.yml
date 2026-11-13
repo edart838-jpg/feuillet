@@ -3,7 +3,6 @@ name: Compilation de l'APK
 on:
   push:
     branches: ["main", "claude/**"]
-  pull_request:
   workflow_dispatch:
 
 permissions:
